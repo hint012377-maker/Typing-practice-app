@@ -74,22 +74,21 @@ const lesson: Country[] = [
   { code: "PHL", korean: "필리핀", english: "Philippines", lat: 12.88, lng: 121.77, zoom: 5 },
 ];
 
-// 지도 URL 생성 함수 (isFixed: true이면 줌 레벨 1의 전체 지도 모드)
-const mapUrl = (country: Country, isFixed: boolean) => {
-  const zoomLevel = isFixed ? 1 : Math.min(country.zoom + 1, 10);
-  return `https://maps.google.com/maps?q=${country.lat},${country.lng}&z=${zoomLevel}&output=embed&hl=ko`;
-};
+const zoomedMapUrl = (country: Country) =>
+  `https://maps.google.com/maps?q=${country.lat},${country.lng}&z=${Math.min(
+    country.zoom + 1,
+    10,
+  )}&output=embed&hl=ko`;
 
-const MapFrames = memo(function MapFrames({
+// 확대 지도 컴포넌트
+const ZoomedMapFrames = memo(function ZoomedMapFrames({
   index,
   loaded,
   onLoaded,
-  isFixedMap,
 }: {
   index: number;
   loaded: Record<string, boolean>;
   onLoaded: (code: string) => void;
-  isFixedMap: boolean;
 }) {
   const visibleCountries = [
     lesson[index],
@@ -101,8 +100,8 @@ const MapFrames = memo(function MapFrames({
     <>
       {visibleCountries.map((country) => (
         <iframe
-          key={`${country.code}-${isFixedMap ? "fixed" : "zoomed"}`}
-          src={mapUrl(country, isFixedMap)}
+          key={country.code}
+          src={zoomedMapUrl(country)}
           title={`${country.korean} 위치 지도`}
           onLoad={() => onLoaded(country.code)}
           aria-hidden={country.code !== current.code}
@@ -121,6 +120,49 @@ const MapFrames = memo(function MapFrames({
         </div>
       )}
     </>
+  );
+});
+
+// 완전히 고정된 단일 구글 세계지도 컴포넌트 (타일링 복제 없는 뷰)
+const FixedWorldMap = memo(function FixedWorldMap({
+  currentCountry,
+}: {
+  currentCountry: Country;
+}) {
+  // 경도(-180~180) -> X축 좌표 (%)
+  const xPercent = ((currentCountry.lng + 180) / 360) * 100;
+
+  // 위도(-85~85) -> Mercator Y축 좌표 (%)
+  const latRad = (currentCountry.lat * Math.PI) / 180;
+  const mercN = Math.log(Math.tan(Math.PI / 4 + latRad / 2));
+  const yPercent = (0.5 - mercN / (2 * Math.PI)) * 100;
+
+  return (
+    <div className="relative h-full w-full overflow-hidden bg-[#aadaff]">
+      {/* 구글 맵 단일 프레임 (분할 반복 방지 마스킹) */}
+      <div className="absolute inset-x-[-15%] inset-y-[-10%] h-[120%] w-[130%] pointer-events-none">
+        <iframe
+          src="https://maps.google.com/maps?q=10,10&z=2&output=embed&hl=ko"
+          title="고정 구글 세계 지도"
+          className="h-full w-full border-0 opacity-95"
+        />
+      </div>
+
+      {/* 빨간 위치 표시 핀 (카메라 이동 없이 핀만 완벽 위치에 찍힘) */}
+      <div
+        className="pointer-events-none absolute z-30 flex -translate-x-1/2 -translate-y-full flex-col items-center transition-all duration-500 ease-out"
+        style={{
+          left: `${xPercent}%`,
+          top: `${Math.max(12, Math.min(88, yPercent))}%`,
+        }}
+      >
+        <div className="flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-1 text-xs font-extrabold text-white shadow-xl animate-bounce">
+          <span className="h-2 w-2 rounded-full bg-white animate-ping" />
+          {currentCountry.korean}
+        </div>
+        <div className="h-3 w-3 -translate-y-1 rotate-45 bg-red-600 shadow-md" />
+      </div>
+    </div>
   );
 });
 
@@ -299,19 +341,22 @@ export default function App() {
         </div>
 
         <div className="relative z-0 h-[58vh] min-h-[440px] shrink-0 overflow-hidden bg-[#dce8db]">
-          <MapFrames
-            index={index}
-            loaded={loaded}
-            onLoaded={markLoaded}
-            isFixedMap={isFixedMap}
-          />
+          {isFixedMap ? (
+            <FixedWorldMap currentCountry={current} />
+          ) : (
+            <ZoomedMapFrames
+              index={index}
+              loaded={loaded}
+              onLoaded={markLoaded}
+            />
+          )}
 
           <div className="absolute right-5 top-5 z-30 flex gap-2 sm:right-10">
             <button
               onClick={() => setIsFixedMap((prev) => !prev)}
               className="rounded-full bg-[#17231a] px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-[#2c3e2e] transition-colors"
             >
-              {isFixedMap ? "🔍 확대 지도 모드" : "🗺️ 전체 지도 모드"}
+              {isFixedMap ? "🔍 확대 지도 모드" : "🗺️ 고정 전체 지도"}
             </button>
 
             <button
