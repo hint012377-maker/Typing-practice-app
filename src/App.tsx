@@ -122,6 +122,40 @@ const MapFrames = memo(function MapFrames({
   );
 });
 
+// 가만히 있는 전체 세계 지도 컴포넌트 (위치 핀 표시)
+const FixedWorldMap = memo(function FixedWorldMap({
+  currentCountry,
+}: {
+  currentCountry: Country;
+}) {
+  // 위도/경도를 지도 상의 % 위치로 변환 (Mercator 간이 투영)
+  const xPercent = ((currentCountry.lng + 180) / 360) * 100;
+  const yPercent = ((90 - currentCountry.lat) / 180) * 100;
+
+  return (
+    <div className="relative h-full w-full overflow-hidden bg-[#aadaff]">
+      {/* 고정 세계 지도 배경 iframe */}
+      <iframe
+        src="https://maps.google.com/maps?q=0,0&z=2&output=embed&hl=ko"
+        title="전체 세계 지도"
+        className="pointer-events-none h-full w-full border-0 opacity-90"
+      />
+
+      {/* 대상 국가 빨간색 핀 마커 */}
+      <div
+        className="pointer-events-none absolute z-20 flex -translate-x-1/2 -translate-y-full flex-col items-center transition-all duration-500 ease-out"
+        style={{ left: `${xPercent}%`, top: `${yPercent}%` }}
+      >
+        <div className="flex items-center gap-1.5 rounded-md bg-red-600 px-2.5 py-1 text-xs font-bold text-white shadow-lg animate-bounce">
+          <span className="h-2 w-2 rounded-full bg-white animate-ping" />
+          {currentCountry.korean}
+        </div>
+        <div className="h-3 w-3 -translate-y-1 rotate-45 bg-red-600" />
+      </div>
+    </div>
+  );
+});
+
 export default function App() {
   const [index, setIndex] = useState(0);
   const [typed, setTyped] = useState("");
@@ -130,6 +164,8 @@ export default function App() {
   const [correct, setCorrect] = useState(0);
   const [errors, setErrors] = useState(0);
   const [loaded, setLoaded] = useState<Record<string, boolean>>({});
+  const [isFixedMap, setIsFixedMap] = useState(false); // 전체 지도 모드 여부
+
   const inputRef = useRef<HTMLInputElement>(null);
   const composing = useRef(false);
   const advancing = useRef(false);
@@ -295,16 +331,29 @@ export default function App() {
         </div>
 
         <div className="relative z-0 h-[58vh] min-h-[440px] shrink-0 overflow-hidden bg-[#dce8db]">
-          <MapFrames index={index} loaded={loaded} onLoaded={markLoaded} />
+          {/* 지도 모드에 따른 화면 분기 */}
+          {isFixedMap ? (
+            <FixedWorldMap currentCountry={current} />
+          ) : (
+            <MapFrames index={index} loaded={loaded} onLoaded={markLoaded} />
+          )}
 
-          <div className="absolute right-5 top-5 z-30 sm:right-10">
+          {/* 우측 상단 컨트롤 버튼 (지도 모드 변경 & 다시 입력) */}
+          <div className="absolute right-5 top-5 z-30 flex gap-2 sm:right-10">
+            <button
+              onClick={() => setIsFixedMap((prev) => !prev)}
+              className="rounded-full bg-[#17231a] px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-[#2c3e2e] transition-colors"
+            >
+              {isFixedMap ? "🔍 확대 지도 모드" : "🗺️ 전체 지도 모드"}
+            </button>
+
             <button
               onClick={() => {
                 setTyped("");
                 setInputValue("");
                 inputRef.current?.focus();
               }}
-              className="rounded-full bg-white px-4 py-2 text-xs font-bold text-[#4a5b4c] shadow-sm"
+              className="rounded-full bg-white px-4 py-2 text-xs font-bold text-[#4a5b4c] shadow-sm hover:bg-gray-50 transition-colors"
             >
               다시 입력
             </button>
