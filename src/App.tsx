@@ -74,21 +74,22 @@ const lesson: Country[] = [
   { code: "PHL", korean: "필리핀", english: "Philippines", lat: 12.88, lng: 121.77, zoom: 5 },
 ];
 
-const zoomedMapUrl = (country: Country) =>
-  `https://maps.google.com/maps?q=${country.lat},${country.lng}&z=${Math.min(
-    country.zoom + 1,
-    10,
-  )}&output=embed&hl=ko`;
+const mapUrl = (country: Country, isFixed: boolean) => {
+  // isFixed가 true일 때 줌 레벨 2로 고정하여 넓은 세계 지도 모드 제공
+  const z = isFixed ? 2 : Math.min(country.zoom + 1, 10);
+  return `https://maps.google.com/maps?q=${country.lat},${country.lng}&z=${z}&output=embed&hl=ko`;
+};
 
-// 확대 지도 컴포넌트
-const ZoomedMapFrames = memo(function ZoomedMapFrames({
+const MapFrames = memo(function MapFrames({
   index,
   loaded,
   onLoaded,
+  isFixedMap,
 }: {
   index: number;
   loaded: Record<string, boolean>;
   onLoaded: (code: string) => void;
+  isFixedMap: boolean;
 }) {
   const visibleCountries = [
     lesson[index],
@@ -100,16 +101,16 @@ const ZoomedMapFrames = memo(function ZoomedMapFrames({
     <>
       {visibleCountries.map((country) => (
         <iframe
-          key={country.code}
-          src={zoomedMapUrl(country)}
+          key={`${country.code}-${isFixedMap ? "fixed" : "zoomed"}`}
+          src={mapUrl(country, isFixedMap)}
           title={`${country.korean} 위치 지도`}
           onLoad={() => onLoaded(country.code)}
           aria-hidden={country.code !== current.code}
           tabIndex={country.code === current.code ? 0 : -1}
-          className={`absolute inset-0 h-full w-full border-0 transition-[opacity,transform] duration-500 ease-out ${
+          className={`absolute inset-0 h-full w-full border-0 transition-opacity duration-300 ease-out ${
             country.code === current.code
-              ? "z-10 scale-100 opacity-100"
-              : "pointer-events-none z-0 scale-105 opacity-0"
+              ? "z-10 opacity-100"
+              : "pointer-events-none z-0 opacity-0"
           }`}
           loading="eager"
         />
@@ -123,49 +124,6 @@ const ZoomedMapFrames = memo(function ZoomedMapFrames({
   );
 });
 
-// 완전히 고정된 단일 구글 세계지도 컴포넌트 (타일링 복제 없는 뷰)
-const FixedWorldMap = memo(function FixedWorldMap({
-  currentCountry,
-}: {
-  currentCountry: Country;
-}) {
-  // 경도(-180~180) -> X축 좌표 (%)
-  const xPercent = ((currentCountry.lng + 180) / 360) * 100;
-
-  // 위도(-85~85) -> Mercator Y축 좌표 (%)
-  const latRad = (currentCountry.lat * Math.PI) / 180;
-  const mercN = Math.log(Math.tan(Math.PI / 4 + latRad / 2));
-  const yPercent = (0.5 - mercN / (2 * Math.PI)) * 100;
-
-  return (
-    <div className="relative h-full w-full overflow-hidden bg-[#aadaff]">
-      {/* 구글 맵 단일 프레임 (분할 반복 방지 마스킹) */}
-      <div className="absolute inset-x-[-15%] inset-y-[-10%] h-[120%] w-[130%] pointer-events-none">
-        <iframe
-          src="https://maps.google.com/maps?q=10,10&z=2&output=embed&hl=ko"
-          title="고정 구글 세계 지도"
-          className="h-full w-full border-0 opacity-95"
-        />
-      </div>
-
-      {/* 빨간 위치 표시 핀 (카메라 이동 없이 핀만 완벽 위치에 찍힘) */}
-      <div
-        className="pointer-events-none absolute z-30 flex -translate-x-1/2 -translate-y-full flex-col items-center transition-all duration-500 ease-out"
-        style={{
-          left: `${xPercent}%`,
-          top: `${Math.max(12, Math.min(88, yPercent))}%`,
-        }}
-      >
-        <div className="flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-1 text-xs font-extrabold text-white shadow-xl animate-bounce">
-          <span className="h-2 w-2 rounded-full bg-white animate-ping" />
-          {currentCountry.korean}
-        </div>
-        <div className="h-3 w-3 -translate-y-1 rotate-45 bg-red-600 shadow-md" />
-      </div>
-    </div>
-  );
-});
-
 export default function App() {
   const [index, setIndex] = useState(0);
   const [typed, setTyped] = useState("");
@@ -174,7 +132,7 @@ export default function App() {
   const [correct, setCorrect] = useState(0);
   const [errors, setErrors] = useState(0);
   const [loaded, setLoaded] = useState<Record<string, boolean>>({});
-  const [isFixedMap, setIsFixedMap] = useState(false);
+  const [isFixedMap, setIsFixedMap] = useState(true);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const composing = useRef(false);
@@ -341,22 +299,19 @@ export default function App() {
         </div>
 
         <div className="relative z-0 h-[58vh] min-h-[440px] shrink-0 overflow-hidden bg-[#dce8db]">
-          {isFixedMap ? (
-            <FixedWorldMap currentCountry={current} />
-          ) : (
-            <ZoomedMapFrames
-              index={index}
-              loaded={loaded}
-              onLoaded={markLoaded}
-            />
-          )}
+          <MapFrames
+            index={index}
+            loaded={loaded}
+            onLoaded={markLoaded}
+            isFixedMap={isFixedMap}
+          />
 
           <div className="absolute right-5 top-5 z-30 flex gap-2 sm:right-10">
             <button
               onClick={() => setIsFixedMap((prev) => !prev)}
               className="rounded-full bg-[#17231a] px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-[#2c3e2e] transition-colors"
             >
-              {isFixedMap ? "🔍 확대 지도 모드" : "🗺️ 고정 전체 지도"}
+              {isFixedMap ? "🔍 상세 확대 모드" : "🗺️ 넓은 지도 모드"}
             </button>
 
             <button
