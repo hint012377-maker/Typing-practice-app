@@ -96,8 +96,7 @@ function CountryTyping() {
   const [index, setIndex] = useState(0);
   const [isFixedMap, setIsFixedMap] = useState(true);
   const [language, setLanguage] = useState<"ko" | "en">("ko");
-  const [typed, setTyped] = useState("");
-  const [inputValue, setInputValue] = useState("");
+  const [displayInput, setDisplayInput] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [correct, setCorrect] = useState(0);
   const [errors, setErrors] = useState(0);
@@ -113,12 +112,18 @@ function CountryTyping() {
     return () => window.clearInterval(timer);
   }, []);
 
-  useEffect(() => {
+  const resetInput = useCallback(() => {
     advancing.current = false;
-    setTyped("");
-    setInputValue("");
-    setTimeout(() => inputRef.current?.focus(), 100);
-  }, [index, language]);
+    setDisplayInput("");
+    if (inputRef.current) {
+      inputRef.current.value = "";
+      inputRef.current.focus();
+    }
+  }, []);
+
+  useEffect(() => {
+    resetInput();
+  }, [index, language, resetInput]);
 
   const markLoaded = useCallback((code: string) => setLoaded((value) => (value[code] ? value : { ...value, [code]: true })), []);
 
@@ -145,9 +150,7 @@ function CountryTyping() {
       };
       if (context.state === "suspended") void context.resume().then(strike);
       else strike();
-    } catch (e) {
-      // 오디오 미지원 환경 예외 처리
-    }
+    } catch (e) {}
   };
 
   const playSuccessSound = () => {
@@ -168,9 +171,7 @@ function CountryTyping() {
         });
       if (context.state === "suspended") void context.resume().then(chime);
       else chime();
-    } catch (e) {
-      // 오디오 미지원 환경 예외 처리
-    }
+    } catch (e) {}
   };
 
   const advance = () => {
@@ -178,40 +179,22 @@ function CountryTyping() {
     advancing.current = true;
     playSuccessSound();
     setCorrect((value) => value + 1);
-    setTyped("");
-    setInputValue("");
     setIndex((value) => (value + 1) % lesson.length);
   };
 
-  const checkMatch = (text: string) => {
-    if (text === target) {
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setDisplayInput(val);
+    playKeySound();
+
+    if (val === target) {
       advance();
       return;
     }
 
-    if (target.startsWith(text)) {
-      setTyped(text);
-    } else {
-      if (text.length > typed.length) {
-        setErrors((value) => value + 1);
-      }
+    if (!target.startsWith(val) && val.length > displayInput.length) {
+      setErrors((v) => v + 1);
     }
-  };
-
-  const onInput = (event: ChangeEvent<HTMLInputElement>) => {
-    const val = event.target.value;
-    setInputValue(val);
-
-    if (val.length > inputValue.length) {
-      playKeySound();
-    }
-
-    checkMatch(val);
-  };
-
-  const onCompositionEnd = (event: CompositionEvent<HTMLInputElement>) => {
-    const val = event.currentTarget.value;
-    checkMatch(val);
   };
 
   const focusInput = () => {
@@ -219,7 +202,7 @@ function CountryTyping() {
   };
 
   const accuracy = correct + errors === 0 ? 100 : Math.round((correct / (correct + errors)) * 100);
-  const typedPerMinute = useMemo(() => (elapsed ? Math.round(((correct * 4 + typed.length) / elapsed) * 60) : 0), [correct, elapsed, typed.length]);
+  const typedPerMinute = useMemo(() => (elapsed ? Math.round(((correct * 4 + displayInput.length) / elapsed) * 60) : 0), [correct, elapsed, displayInput.length]);
   const time = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
 
   return (
@@ -270,11 +253,7 @@ function CountryTyping() {
               </button>
             </div>
             <button
-              onClick={() => {
-                setTyped("");
-                setInputValue("");
-                focusInput();
-              }}
+              onClick={resetInput}
               className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-[#4a5b4c] shadow-sm transition hover:bg-gray-50"
             >
               다시 입력
@@ -296,35 +275,33 @@ function CountryTyping() {
             ))}
           </div>
           <div className="mx-auto mt-4 max-w-3xl text-center sm:mt-5">
-            <div className="border-y-2 border-[#3b9d44] py-2 sm:border-y-4 sm:py-3">
+            <div className="border-y-2 border-[#3b9d44] py-2 sm:border-y-4 sm:py-3" onClick={focusInput}>
               <p className="text-2xl font-bold tracking-[.1em] text-[#273b29] sm:text-5xl sm:tracking-[.15em]">{target}</p>
               <div className="mt-2 flex flex-wrap justify-center gap-1.5 text-xl font-bold sm:mt-3 sm:gap-2 sm:text-3xl">
                 {Array.from(target).map((char, charIndex) => (
                   <span
                     key={`${char}-${charIndex}`}
                     className={`grid h-8 min-w-8 place-items-center rounded-lg sm:h-10 sm:min-w-10 ${
-                      inputValue[charIndex] === char
+                      displayInput[charIndex] === char
                         ? "bg-[#e5f5e6] text-[#2b9138]"
-                        : inputValue[charIndex]
+                        : displayInput[charIndex]
                         ? "bg-[#fff0ee] text-[#df5145]"
                         : "bg-[#f2f5f1] text-[#bbc5bb]"
                     }`}
                   >
-                    {inputValue[charIndex] || char}
+                    {displayInput[charIndex] || char}
                   </span>
                 ))}
               </div>
               <p className="mt-1.5 text-[11px] font-medium tracking-wide text-[#829082] sm:mt-2 sm:text-xs">{current.english}</p>
             </div>
 
-            {/* 모바일 키보드 직관적 호환 입력창 */}
+            {/* 모바일 키보드 직관적 입력창 */}
             <div className="mt-4 flex justify-center">
               <input
                 ref={inputRef}
                 type="text"
-                value={inputValue}
-                onChange={onInput}
-                onCompositionEnd={onCompositionEnd}
+                onChange={handleChange}
                 placeholder="여기를 터치하여 타자 입력"
                 className="w-full max-w-md rounded-xl border-2 border-[#3b9d44] bg-[#f7faf7] px-4 py-3 text-center text-base font-bold text-[#17231a] shadow-inner focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#3b9d44]"
                 autoComplete="off"
