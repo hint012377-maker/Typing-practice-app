@@ -118,7 +118,8 @@ function CountryTyping() {
     advancing.current = false;
     setTyped("");
     setInputValue("");
-    inputRef.current?.focus();
+    // 모바일 지원: 화면 전환 시 포커스 잡기
+    setTimeout(() => inputRef.current?.focus(), 100);
   }, [index, language]);
 
   const markLoaded = useCallback((code: string) => setLoaded((value) => (value[code] ? value : { ...value, [code]: true })), []);
@@ -223,6 +224,10 @@ function CountryTyping() {
     commit(event.currentTarget.value);
   };
 
+  const focusInput = () => {
+    inputRef.current?.focus();
+  };
+
   const accuracy = correct + errors === 0 ? 100 : Math.round((correct / (correct + errors)) * 100);
   const typedPerMinute = useMemo(() => (elapsed ? Math.round(((correct * 4 + typed.length) / elapsed) * 60) : 0), [correct, elapsed, typed.length]);
   const time = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
@@ -246,9 +251,9 @@ function CountryTyping() {
           <p className="text-sm font-semibold text-[#3b9d44]">
             {String(index + 1).padStart(2, "0")} <span className="font-normal text-[#95a295]">/ {String(lesson.length).padStart(2, "0")} 국가</span>
           </p>
-          <p className="text-xs text-[#748174]">나라의 위치를 보고 이름을 입력하세요.</p>
+          <p className="text-xs text-[#748174]">터치/클릭 후 나라 이름을 입력하세요.</p>
         </div>
-        <div className="relative z-0 h-[58vh] min-h-[440px] shrink-0 overflow-hidden bg-[#dce8db]">
+        <div className="relative z-0 h-[45vh] min-h-[300px] shrink-0 overflow-hidden bg-[#dce8db] sm:h-[58vh] sm:min-h-[440px]">
           <MapFrames index={index} loaded={loaded} onLoaded={markLoaded} isFixedMap={isFixedMap} />
           <div className="pointer-events-none absolute bottom-5 left-1/2 z-30 hidden -translate-x-1/2 rounded-full bg-white/95 px-5 py-2 text-[11px] font-semibold text-[#5d6e5f] shadow-lg sm:block">
             지도에서 나라의 윤곽과 주변 지역을 살펴보세요
@@ -256,11 +261,11 @@ function CountryTyping() {
           <div className="absolute right-3 top-3 z-30 flex max-w-[calc(100%-24px)] flex-wrap justify-end gap-2 sm:right-10 sm:top-5">
             <button
               onClick={() => setIsFixedMap((value) => !value)}
-              className="rounded-full bg-[#17231a] px-3 py-2 text-xs font-bold text-white shadow-md transition-colors hover:bg-[#2c3e2e]"
+              className="rounded-full bg-[#17231a] px-3 py-1.5 text-xs font-bold text-white shadow-md transition-colors hover:bg-[#2c3e2e]"
             >
               {isFixedMap ? "🔍 상세 확대" : "🗺️ 넓은 지도"}
             </button>
-            <div className="flex rounded-full bg-white p-1 shadow-md">
+            <div className="flex rounded-full bg-white p-0.5 shadow-md">
               <button
                 onClick={() => setLanguage("ko")}
                 className={`rounded-full px-2.5 py-1 text-xs font-bold ${language === "ko" ? "bg-[#3b9d44] text-white" : "text-[#607160]"}`}
@@ -278,15 +283,19 @@ function CountryTyping() {
               onClick={() => {
                 setTyped("");
                 setInputValue("");
-                inputRef.current?.focus();
+                focusInput();
               }}
-              className="rounded-full bg-white px-3 py-2 text-xs font-bold text-[#4a5b4c] shadow-sm transition hover:bg-gray-50"
+              className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-[#4a5b4c] shadow-sm transition hover:bg-gray-50"
             >
               다시 입력
             </button>
           </div>
         </div>
-        <div className="relative z-50 shrink-0 border-t border-[#cfe0cf] bg-white px-4 pb-5 pt-0 shadow-[0_-10px_28px_rgba(24,52,28,.10)] sm:px-8">
+        <div 
+          onClick={focusInput}
+          onTouchStart={focusInput}
+          className="relative z-50 shrink-0 border-t border-[#cfe0cf] bg-white px-4 pb-6 pt-0 shadow-[0_-10px_28px_rgba(24,52,28,.10)] sm:px-8 cursor-pointer"
+        >
           <div className="mx-auto -mt-6 grid max-w-2xl grid-cols-4 overflow-hidden rounded-2xl border border-[#cbd9ca] bg-white shadow-[0_8px_24px_rgba(32,67,35,.18)]">
             {[
               { label: "시간", value: time },
@@ -294,29 +303,21 @@ function CountryTyping() {
               { label: "정확도", value: `${accuracy}%` },
               { label: "정답", value: correct },
             ].map((stat) => (
-              <div key={stat.label} className="border-r border-[#d8e3d7] px-1 py-3 text-center last:border-r-0 sm:py-3.5">
-                <p className="text-[11px] font-bold tracking-tight text-[#526c55] sm:text-xs">{stat.label}</p>
-                <p className="mt-1 text-base font-extrabold tabular-nums text-[#19351d] sm:text-lg">{stat.value}</p>
+              <div key={stat.label} className="border-r border-[#d8e3d7] px-1 py-2.5 text-center last:border-r-0 sm:py-3.5">
+                <p className="text-[10px] font-bold tracking-tight text-[#526c55] sm:text-xs">{stat.label}</p>
+                <p className="mt-0.5 text-sm font-extrabold tabular-nums text-[#19351d] sm:text-lg">{stat.value}</p>
               </div>
             ))}
           </div>
-          <div
-            onClick={() => inputRef.current?.focus()}
-            className="mx-auto mt-5 max-w-3xl cursor-text text-center"
-            role="button"
-            tabIndex={0}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") inputRef.current?.focus();
-            }}
-          >
-            <p className="text-xs font-semibold text-[#7b897b]">아래 나라 이름을 보고 그대로 타이핑하세요</p>
-            <div className="mt-2 border-y-4 border-[#3b9d44] py-3">
-              <p className="text-3xl font-bold tracking-[.15em] text-[#273b29] sm:text-5xl">{target}</p>
-              <div className="mt-3 flex justify-center gap-2 text-2xl font-bold sm:text-3xl">
+          <div className="mx-auto mt-4 max-w-3xl text-center sm:mt-5">
+            <p className="text-xs font-semibold text-[#7b897b]">화면을 터치하고 아래 나라 이름을 타핑하세요</p>
+            <div className="mt-2 border-y-2 border-[#3b9d44] py-2 sm:border-y-4 sm:py-3">
+              <p className="text-2xl font-bold tracking-[.1em] text-[#273b29] sm:text-5xl sm:tracking-[.15em]">{target}</p>
+              <div className="mt-2 flex flex-wrap justify-center gap-1.5 text-xl font-bold sm:mt-3 sm:gap-2 sm:text-3xl">
                 {Array.from(target).map((char, charIndex) => (
                   <span
                     key={`${char}-${charIndex}`}
-                    className={`grid h-10 min-w-10 place-items-center rounded-lg ${
+                    className={`grid h-8 min-w-8 place-items-center rounded-lg sm:h-10 sm:min-w-10 ${
                       inputValue[charIndex] === char
                         ? "bg-[#e5f5e6] text-[#2b9138]"
                         : inputValue[charIndex]
@@ -328,9 +329,10 @@ function CountryTyping() {
                   </span>
                 ))}
               </div>
-              <p className="mt-2 text-xs font-medium tracking-wide text-[#829082]">{current.english}</p>
+              <p className="mt-1.5 text-[11px] font-medium tracking-wide text-[#829082] sm:mt-2 sm:text-xs">{current.english}</p>
             </div>
           </div>
+          {/* 모바일 키보드 호환용 숨겨진 input */}
           <input
             ref={inputRef}
             value={inputValue}
@@ -339,11 +341,15 @@ function CountryTyping() {
               composing.current = true;
             }}
             onCompositionEnd={onCompositionEnd}
-            className="sr-only"
+            inputMode="text"
+            className="absolute opacity-0 pointer-events-none h-0 w-0"
             aria-label="나라 이름 입력"
             autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
           />
-          <p className="mt-4 text-center text-[11px] text-[#8a968a]">글자 단위로 입력 진행을 확인할 수 있어요</p>
+          <p className="mt-3 text-center text-[10px] text-[#8a968a] sm:mt-4 sm:text-[11px]">터치 시 스마트폰 가상 키보드가 나타납니다</p>
         </div>
       </section>
     </main>
@@ -361,38 +367,38 @@ function Launcher() {
           </div>
           <p className="font-mono text-[10px] tracking-[.18em] text-[#b6d3be]">LEARN BY PLAYING</p>
         </header>
-        <section className="mt-16 max-w-3xl sm:mt-24">
+        <section className="mt-12 max-w-3xl sm:mt-24">
           <p className="font-mono text-xs tracking-[.18em] text-[#e4f252]">WORLD · WEATHER · WORDS</p>
-          <h1 className="mt-4 text-5xl font-bold leading-[.95] tracking-[-.06em] sm:text-7xl">
+          <h1 className="mt-4 text-4xl font-bold leading-[.95] tracking-[-.06em] sm:text-7xl">
             지도를 읽고,<br />기후를 놀다.
           </h1>
-          <p className="mt-6 max-w-xl text-base leading-relaxed text-[#bfd5c3]">
+          <p className="mt-6 max-w-xl text-sm leading-relaxed text-[#bfd5c3] sm:text-base">
             나라 이름을 손끝으로 익히고, 작은 기후 요소를 합쳐 거대한 날씨 현상을 만들어 보세요.
           </p>
         </section>
-        <section className="mt-12 grid gap-5 lg:grid-cols-[1.2fr_.8fr]">
+        <section className="mt-10 grid gap-5 lg:grid-cols-[1.2fr_.8fr]">
           <Link
             to="/typing"
-            className="group relative min-h-[310px] overflow-hidden rounded-[28px] bg-[#dff3e3] p-7 text-[#17342f] transition hover:-translate-y-1"
+            className="group relative min-h-[260px] overflow-hidden rounded-[28px] bg-[#dff3e3] p-7 text-[#17342f] transition hover:-translate-y-1 sm:min-h-[310px]"
           >
             <div className="absolute -right-12 -top-12 h-64 w-64 rounded-full bg-[#9ad5b0] opacity-70 transition group-hover:scale-110" />
             <p className="relative font-mono text-xs font-bold tracking-widest text-[#3b9d44]">01 · COUNTRY TYPING</p>
-            <h2 className="relative mt-10 text-4xl font-bold tracking-[-.05em]">
+            <h2 className="relative mt-8 text-3xl font-bold tracking-[-.05em] sm:mt-10 sm:text-4xl">
               나라 이름<br />타자연습
             </h2>
-            <p className="relative mt-3 max-w-xs text-sm text-[#52725a]">한글 또는 영어로, 지도 위 나라를 빠르게 익히는 연습.</p>
+            <p className="relative mt-3 max-w-xs text-xs text-[#52725a] sm:text-sm">한글 또는 영어로, 지도 위 나라를 빠르게 익히는 연습.</p>
             <span className="absolute bottom-7 right-7 grid h-12 w-12 place-items-center rounded-full bg-[#17342f] text-xl text-white transition group-hover:translate-x-1">
               →
             </span>
           </Link>
           <Link
             to="/climate"
-            className="group relative min-h-[310px] overflow-hidden rounded-[28px] bg-[#f39b66] p-7 text-[#442116] transition hover:-translate-y-1"
+            className="group relative min-h-[260px] overflow-hidden rounded-[28px] bg-[#f39b66] p-7 text-[#442116] transition hover:-translate-y-1 sm:min-h-[310px]"
           >
             <div className="absolute -bottom-20 -right-12 h-64 w-64 rounded-full bg-[#e9534b] opacity-80 transition group-hover:scale-110" />
             <p className="relative font-mono text-xs font-bold tracking-widest text-[#793120]">02 · CLIMATE MERGE</p>
-            <h2 className="relative mt-10 text-4xl font-bold tracking-[-.05em]">기후 수박게임</h2>
-            <p className="relative mt-3 max-w-xs text-sm text-[#6f3527]">작은 기후 요소를 떨어뜨리고, 같은 요소끼리 합쳐 보세요.</p>
+            <h2 className="relative mt-8 text-3xl font-bold tracking-[-.05em] sm:mt-10 sm:text-4xl">기후 수박게임</h2>
+            <p className="relative mt-3 max-w-xs text-xs text-[#6f3527] sm:text-sm">작은 기후 요소를 떨어뜨리고, 같은 요소끼리 합쳐 보세요.</p>
             <span className="absolute bottom-7 right-7 grid h-12 w-12 place-items-center rounded-full bg-[#442116] text-xl text-white transition group-hover:translate-x-1">
               ↓
             </span>
@@ -485,7 +491,7 @@ function ClimateMerge() {
           <section
             ref={boardRef}
             onPointerDown={drop}
-            className="relative h-[68vh] min-h-[500px] touch-none overflow-hidden rounded-[30px] border-[6px] border-[#8e543b] bg-[linear-gradient(160deg,#78c6e6_0%,#b8e3ee_55%,#e3f0d7_56%,#d1e8b8_100%)] shadow-[inset_0_0_0_5px_rgba(255,255,255,.4)]"
+            className="relative h-[60vh] min-h-[400px] touch-none overflow-hidden rounded-[30px] border-[6px] border-[#8e543b] bg-[linear-gradient(160deg,#78c6e6_0%,#b8e3ee_55%,#e3f0d7_56%,#d1e8b8_100%)] shadow-[inset_0_0_0_5px_rgba(255,255,255,.4)] sm:h-[68vh] sm:min-h-[500px]"
           >
             <div className="absolute inset-x-0 top-0 h-20 bg-white/20" />
             <p className="pointer-events-none absolute left-1/2 top-5 -translate-x-1/2 rounded-full bg-white/80 px-4 py-2 text-xs font-bold text-[#7b4b39]">
