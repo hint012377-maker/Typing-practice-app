@@ -117,7 +117,7 @@ function CountryTyping() {
     advancing.current = false;
     setTyped("");
     setInputValue("");
-    inputRef.current?.focus();
+    setTimeout(() => inputRef.current?.focus(), 100);
   }, [index, language]);
 
   const markLoaded = useCallback((code: string) => setLoaded((value) => (value[code] ? value : { ...value, [code]: true })), []);
@@ -128,58 +128,49 @@ function CountryTyping() {
   };
 
   const playKeySound = () => {
-    const context = getAudio();
-    const strike = () => {
-      const now = context.currentTime;
-      const oscillator = context.createOscillator();
-      const body = context.createGain();
-      oscillator.type = "square";
-      oscillator.frequency.setValueAtTime(180, now);
-      oscillator.frequency.exponentialRampToValueAtTime(90, now + 0.045);
-      body.gain.setValueAtTime(0.048, now);
-      body.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
-      oscillator.connect(body).connect(context.destination);
-      oscillator.start(now);
-      oscillator.stop(now + 0.06);
-
-      const noise = context.createBuffer(1, Math.floor(context.sampleRate * 0.028), context.sampleRate);
-      const samples = noise.getChannelData(0);
-      samples.forEach((_, sample) => {
-        samples[sample] = (Math.random() * 2 - 1) * Math.pow(1 - sample / samples.length, 4);
-      });
-      const click = context.createBufferSource();
-      const filter = context.createBiquadFilter();
-      const clickGain = context.createGain();
-      click.buffer = noise;
-      filter.type = "bandpass";
-      filter.frequency.value = 1550;
-      filter.Q.value = 0.8;
-      clickGain.gain.setValueAtTime(0.04, now);
-      clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
-      click.connect(filter).connect(clickGain).connect(context.destination);
-      click.start(now);
-    };
-    if (context.state === "suspended") void context.resume().then(strike);
-    else strike();
+    try {
+      const context = getAudio();
+      const strike = () => {
+        const now = context.currentTime;
+        const oscillator = context.createOscillator();
+        const body = context.createGain();
+        oscillator.type = "square";
+        oscillator.frequency.setValueAtTime(180, now);
+        oscillator.frequency.exponentialRampToValueAtTime(90, now + 0.045);
+        body.gain.setValueAtTime(0.048, now);
+        body.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
+        oscillator.connect(body).connect(context.destination);
+        oscillator.start(now);
+        oscillator.stop(now + 0.06);
+      };
+      if (context.state === "suspended") void context.resume().then(strike);
+      else strike();
+    } catch (e) {
+      // 오디오 미지원 환경 예외 처리
+    }
   };
 
   const playSuccessSound = () => {
-    const context = getAudio();
-    const chime = () =>
-      [523.25, 659.25].forEach((frequency, note) => {
-        const oscillator = context.createOscillator();
-        const gain = context.createGain();
-        const start = context.currentTime + note * 0.075;
-        oscillator.type = "sine";
-        oscillator.frequency.setValueAtTime(frequency, start);
-        gain.gain.setValueAtTime(0.028, start);
-        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.22);
-        oscillator.connect(gain).connect(context.destination);
-        oscillator.start(start);
-        oscillator.stop(start + 0.24);
-      });
-    if (context.state === "suspended") void context.resume().then(chime);
-    else chime();
+    try {
+      const context = getAudio();
+      const chime = () =>
+        [523.25, 659.25].forEach((frequency, note) => {
+          const oscillator = context.createOscillator();
+          const gain = context.createGain();
+          const start = context.currentTime + note * 0.075;
+          oscillator.type = "sine";
+          oscillator.frequency.setValueAtTime(frequency, start);
+          gain.gain.setValueAtTime(0.028, start);
+          gain.gain.exponentialRampToValueAtTime(0.001, start + 0.22);
+          oscillator.connect(gain).connect(context.destination);
+          oscillator.start(start);
+          oscillator.stop(start + 0.24);
+        });
+      if (context.state === "suspended") void context.resume().then(chime);
+      else chime();
+    } catch (e) {
+      // 오디오 미지원 환경 예외 처리
+    }
   };
 
   const advance = () => {
@@ -192,33 +183,35 @@ function CountryTyping() {
     setIndex((value) => (value + 1) % lesson.length);
   };
 
-  const processInput = (next: string) => {
-    if (next === target) {
+  const checkMatch = (text: string) => {
+    if (text === target) {
       advance();
       return;
     }
 
-    if (target.startsWith(next)) {
-      setTyped(next);
-      setInputValue(next);
+    if (target.startsWith(text)) {
+      setTyped(text);
     } else {
-      if (next.length > typed.length) {
+      if (text.length > typed.length) {
         setErrors((value) => value + 1);
       }
-      setInputValue(typed);
     }
   };
 
   const onInput = (event: ChangeEvent<HTMLInputElement>) => {
-    const next = event.target.value;
-    if (next.length > inputValue.length) {
+    const val = event.target.value;
+    setInputValue(val);
+
+    if (val.length > inputValue.length) {
       playKeySound();
     }
-    processInput(next);
+
+    checkMatch(val);
   };
 
   const onCompositionEnd = (event: CompositionEvent<HTMLInputElement>) => {
-    processInput(event.currentTarget.value);
+    const val = event.currentTarget.value;
+    checkMatch(val);
   };
 
   const focusInput = () => {
@@ -248,9 +241,9 @@ function CountryTyping() {
           <p className="text-sm font-semibold text-[#3b9d44]">
             {String(index + 1).padStart(2, "0")} <span className="font-normal text-[#95a295]">/ {String(lesson.length).padStart(2, "0")} 국가</span>
           </p>
-          <p className="text-xs text-[#748174]">입력창을 누르면 키보드가 열립니다.</p>
+          <p className="text-xs text-[#748174]">입력창을 터치하여 키보드를 여세요.</p>
         </div>
-        <div className="relative z-0 h-[40vh] min-h-[250px] shrink-0 overflow-hidden bg-[#dce8db] sm:h-[58vh] sm:min-h-[440px]">
+        <div className="relative z-0 h-[35vh] min-h-[220px] shrink-0 overflow-hidden bg-[#dce8db] sm:h-[58vh] sm:min-h-[440px]">
           <MapFrames index={index} loaded={loaded} onLoaded={markLoaded} isFixedMap={isFixedMap} />
           <div className="pointer-events-none absolute bottom-5 left-1/2 z-30 hidden -translate-x-1/2 rounded-full bg-white/95 px-5 py-2 text-[11px] font-semibold text-[#5d6e5f] shadow-lg sm:block">
             지도에서 나라의 윤곽과 주변 지역을 살펴보세요
@@ -303,8 +296,7 @@ function CountryTyping() {
             ))}
           </div>
           <div className="mx-auto mt-4 max-w-3xl text-center sm:mt-5">
-            <p className="text-xs font-semibold text-[#7b897b]">아래 입력창을 터치하여 키보드로 나라 이름을 입력하세요</p>
-            <div className="mt-2 border-y-2 border-[#3b9d44] py-2 sm:border-y-4 sm:py-3">
+            <div className="border-y-2 border-[#3b9d44] py-2 sm:border-y-4 sm:py-3">
               <p className="text-2xl font-bold tracking-[.1em] text-[#273b29] sm:text-5xl sm:tracking-[.15em]">{target}</p>
               <div className="mt-2 flex flex-wrap justify-center gap-1.5 text-xl font-bold sm:mt-3 sm:gap-2 sm:text-3xl">
                 {Array.from(target).map((char, charIndex) => (
@@ -325,10 +317,11 @@ function CountryTyping() {
               <p className="mt-1.5 text-[11px] font-medium tracking-wide text-[#829082] sm:mt-2 sm:text-xs">{current.english}</p>
             </div>
 
-            {/* 모바일 호환성을 위한 안심 직관적 입력창 */}
+            {/* 모바일 키보드 직관적 호환 입력창 */}
             <div className="mt-4 flex justify-center">
               <input
                 ref={inputRef}
+                type="text"
                 value={inputValue}
                 onChange={onInput}
                 onCompositionEnd={onCompositionEnd}
