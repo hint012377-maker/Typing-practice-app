@@ -1,5 +1,5 @@
-import { ChangeEvent, CompositionEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createBrowserRouter, Link, RouterProvider } from "react-router";
+import { ChangeEvent, CompositionEvent, memo, PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createBrowserRouter, Link, RouterProvider } from "react-router-dom";
 
 type Country = { code: string; korean: string; english: string; lat: number; lng: number; zoom: number };
 
@@ -67,10 +67,29 @@ const mapUrl = (country: Country, isFixed: boolean) => {
 const MapFrames = memo(function MapFrames({ index, loaded, onLoaded, isFixedMap }: { index: number; loaded: Record<string, boolean>; onLoaded: (code: string) => void; isFixedMap: boolean }) {
   const visibleCountries = [lesson[index], lesson[(index + 1) % lesson.length]];
   const current = lesson[index];
-  return <>
-    {visibleCountries.map((country) => <iframe key={`${country.code}-${isFixedMap ? "fixed" : "zoomed"}`} src={mapUrl(country, isFixedMap)} title={`${country.korean} 위치 지도`} onLoad={() => onLoaded(country.code)} aria-hidden={country.code !== current.code} tabIndex={country.code === current.code ? 0 : -1} className={`absolute inset-0 h-full w-full border-0 transition-opacity duration-300 ease-out ${country.code === current.code ? "z-10 opacity-100" : "pointer-events-none z-0 opacity-0"}`} loading="eager" />)}
-    {!loaded[current.code] && <div className="pointer-events-none absolute left-1/2 top-5 z-20 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-semibold text-[#5d6e5f] shadow-sm">지도 불러오는 중</div>}
-  </>;
+  return (
+    <>
+      {visibleCountries.map((country) => (
+        <iframe
+          key={`${country.code}-${isFixedMap ? "fixed" : "zoomed"}`}
+          src={mapUrl(country, isFixedMap)}
+          title={`${country.korean} 위치 지도`}
+          onLoad={() => onLoaded(country.code)}
+          aria-hidden={country.code !== current.code}
+          tabIndex={country.code === current.code ? 0 : -1}
+          className={`absolute inset-0 h-full w-full border-0 transition-opacity duration-300 ease-out ${
+            country.code === current.code ? "z-10 opacity-100" : "pointer-events-none z-0 opacity-0"
+          }`}
+          loading="eager"
+        />
+      ))}
+      {!loaded[current.code] && (
+        <div className="pointer-events-none absolute left-1/2 top-5 z-20 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-semibold text-[#5d6e5f] shadow-sm">
+          지도 불러오는 중
+        </div>
+      )}
+    </>
+  );
 });
 
 function CountryTyping() {
@@ -90,9 +109,19 @@ function CountryTyping() {
   const current = lesson[index];
   const target = language === "ko" ? current.korean : current.english;
 
-  useEffect(() => { const timer = window.setInterval(() => setElapsed((value) => value + 1), 1000); return () => window.clearInterval(timer); }, []);
-  useEffect(() => { advancing.current = false; setTyped(""); setInputValue(""); inputRef.current?.focus(); }, [index, language]);
-  const markLoaded = useCallback((code: string) => setLoaded((value) => value[code] ? value : { ...value, [code]: true }), []);
+  useEffect(() => {
+    const timer = window.setInterval(() => setElapsed((value) => value + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    advancing.current = false;
+    setTyped("");
+    setInputValue("");
+    inputRef.current?.focus();
+  }, [index, language]);
+
+  const markLoaded = useCallback((code: string) => setLoaded((value) => (value[code] ? value : { ...value, [code]: true })), []);
 
   const getAudio = () => {
     if (!audioContext.current) audioContext.current = new AudioContext();
@@ -103,35 +132,55 @@ function CountryTyping() {
     const context = getAudio();
     const strike = () => {
       const now = context.currentTime;
-      const oscillator = context.createOscillator(); const body = context.createGain();
+      const oscillator = context.createOscillator();
+      const body = context.createGain();
       oscillator.type = "square";
       oscillator.frequency.setValueAtTime(180, now);
       oscillator.frequency.exponentialRampToValueAtTime(90, now + 0.045);
       body.gain.setValueAtTime(0.048, now);
       body.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
       oscillator.connect(body).connect(context.destination);
-      oscillator.start(now); oscillator.stop(now + 0.06);
+      oscillator.start(now);
+      oscillator.stop(now + 0.06);
 
       const noise = context.createBuffer(1, Math.floor(context.sampleRate * 0.028), context.sampleRate);
       const samples = noise.getChannelData(0);
-      samples.forEach((_, sample) => { samples[sample] = (Math.random() * 2 - 1) * Math.pow(1 - sample / samples.length, 4); });
-      const click = context.createBufferSource(); const filter = context.createBiquadFilter(); const clickGain = context.createGain();
-      click.buffer = noise; filter.type = "bandpass"; filter.frequency.value = 1550; filter.Q.value = 0.8;
-      clickGain.gain.setValueAtTime(0.04, now); clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
-      click.connect(filter).connect(clickGain).connect(context.destination); click.start(now);
+      samples.forEach((_, sample) => {
+        samples[sample] = (Math.random() * 2 - 1) * Math.pow(1 - sample / samples.length, 4);
+      });
+      const click = context.createBufferSource();
+      const filter = context.createBiquadFilter();
+      const clickGain = context.createGain();
+      click.buffer = noise;
+      filter.type = "bandpass";
+      filter.frequency.value = 1550;
+      filter.Q.value = 0.8;
+      clickGain.gain.setValueAtTime(0.04, now);
+      clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+      click.connect(filter).connect(clickGain).connect(context.destination);
+      click.start(now);
     };
-    if (context.state === "suspended") void context.resume().then(strike); else strike();
+    if (context.state === "suspended") void context.resume().then(strike);
+    else strike();
   };
 
   const playSuccessSound = () => {
     const context = getAudio();
-    const chime = () => [523.25, 659.25].forEach((frequency, note) => {
-      const oscillator = context.createOscillator(); const gain = context.createGain(); const start = context.currentTime + note * 0.075;
-      oscillator.type = "sine"; oscillator.frequency.setValueAtTime(frequency, start);
-      gain.gain.setValueAtTime(0.028, start); gain.gain.exponentialRampToValueAtTime(0.001, start + 0.22);
-      oscillator.connect(gain).connect(context.destination); oscillator.start(start); oscillator.stop(start + 0.24);
-    });
-    if (context.state === "suspended") void context.resume().then(chime); else chime();
+    const chime = () =>
+      [523.25, 659.25].forEach((frequency, note) => {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        const start = context.currentTime + note * 0.075;
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(frequency, start);
+        gain.gain.setValueAtTime(0.028, start);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.22);
+        oscillator.connect(gain).connect(context.destination);
+        oscillator.start(start);
+        oscillator.stop(start + 0.24);
+      });
+    if (context.state === "suspended") void context.resume().then(chime);
+    else chime();
   };
 
   const advance = () => {
@@ -139,53 +188,230 @@ function CountryTyping() {
     advancing.current = true;
     playSuccessSound();
     setCorrect((value) => value + 1);
-    setTyped(""); setInputValue("");
+    setTyped("");
+    setInputValue("");
     setIndex((value) => (value + 1) % lesson.length);
   };
 
   const commit = (next: string) => {
-    if (next === target) { advance(); return; }
-    if (target.startsWith(next)) { setTyped(next); setInputValue(next); return; }
+    if (next === target) {
+      advance();
+      return;
+    }
+    if (target.startsWith(next)) {
+      setTyped(next);
+      setInputValue(next);
+      return;
+    }
     if (next.length > typed.length) setErrors((value) => value + 1);
     setInputValue(typed);
   };
 
   const onInput = (event: ChangeEvent<HTMLInputElement>) => {
     const next = event.target.value;
-    if (composing.current) { setInputValue(next); return; }
+    if (composing.current) {
+      setInputValue(next);
+      return;
+    }
     if (next.length > inputValue.length) playKeySound();
     commit(next);
   };
+
   const onCompositionEnd = (event: CompositionEvent<HTMLInputElement>) => {
     composing.current = false;
     if (event.currentTarget.value.length > typed.length) playKeySound();
     commit(event.currentTarget.value);
   };
+
   const accuracy = correct + errors === 0 ? 100 : Math.round((correct / (correct + errors)) * 100);
-  const typedPerMinute = useMemo(() => elapsed ? Math.round(((correct * 4 + typed.length) / elapsed) * 60) : 0, [correct, elapsed, typed.length]);
+  const typedPerMinute = useMemo(() => (elapsed ? Math.round(((correct * 4 + typed.length) / elapsed) * 60) : 0), [correct, elapsed, typed.length]);
   const time = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
 
-  return <main className="flex min-h-screen flex-col overflow-hidden bg-[#edf3ec] text-[#17231a]">
-    <header className="flex h-16 shrink-0 items-center justify-between border-b border-[#d7e2d5] bg-white px-5 sm:px-8"><div className="flex items-center gap-3"><Link to="/" className="grid h-9 w-9 place-items-center rounded-[11px] bg-[#3b9d44] text-sm font-black text-white">T</Link><div><p className="text-sm font-bold">Country Typing</p><p className="text-[10px] font-medium text-[#809080]">세계시민과 지리 · 나라 이름 연습</p></div></div><p className="hidden font-mono text-[11px] text-[#778778] sm:block">LESSON 01 / WORLD MAP</p></header>
-    <section className="relative flex min-h-0 flex-1 flex-col"><div className="flex items-center justify-between bg-white/90 px-5 py-3 sm:px-10"><p className="text-sm font-semibold text-[#3b9d44]">{String(index + 1).padStart(2, "0")} <span className="font-normal text-[#95a295]">/ {String(lesson.length).padStart(2, "0")} 국가</span></p><p className="text-xs text-[#748174]">나라의 위치를 보고 이름을 입력하세요.</p></div>
-      <div className="relative z-0 h-[58vh] min-h-[440px] shrink-0 overflow-hidden bg-[#dce8db]">
-        <MapFrames index={index} loaded={loaded} onLoaded={markLoaded} isFixedMap={isFixedMap} />
-        <div className="pointer-events-none absolute bottom-5 left-1/2 z-30 hidden -translate-x-1/2 rounded-full bg-white/95 px-5 py-2 text-[11px] font-semibold text-[#5d6e5f] shadow-lg sm:block">지도에서 나라의 윤곽과 주변 지역을 살펴보세요</div>
-        <div className="absolute right-3 top-3 z-30 flex max-w-[calc(100%-24px)] flex-wrap justify-end gap-2 sm:right-10 sm:top-5"><button onClick={() => setIsFixedMap((value) => !value)} className="rounded-full bg-[#17231a] px-3 py-2 text-xs font-bold text-white shadow-md transition-colors hover:bg-[#2c3e2e]">{isFixedMap ? "🔍 상세 확대" : "🗺️ 넓은 지도"}</button><div className="flex rounded-full bg-white p-1 shadow-md"><button onClick={() => setLanguage("ko")} className={`rounded-full px-2.5 py-1 text-xs font-bold ${language === "ko" ? "bg-[#3b9d44] text-white" : "text-[#607160]"}`}>한국어</button><button onClick={() => setLanguage("en")} className={`rounded-full px-2.5 py-1 text-xs font-bold ${language === "en" ? "bg-[#3b9d44] text-white" : "text-[#607160]"}`}>English</button></div><button onClick={() => { setTyped(""); setInputValue(""); inputRef.current?.focus(); }} className="rounded-full bg-white px-3 py-2 text-xs font-bold text-[#4a5b4c] shadow-sm transition hover:bg-gray-50">다시 입력</button></div>
-      </div>
-      <div className="relative z-50 shrink-0 border-t border-[#cfe0cf] bg-white px-4 pb-5 pt-0 shadow-[0_-10px_28px_rgba(24,52,28,.10)] sm:px-8"><div className="mx-auto -mt-6 grid max-w-2xl grid-cols-4 overflow-hidden rounded-2xl border border-[#cbd9ca] bg-white shadow-[0_8px_24px_rgba(32,67,35,.18)]">{[{ label: "시간", value: time }, { label: "분당 타수", value: typedPerMinute }, { label: "정확도", value: `${accuracy}%` }, { label: "정답", value: correct }].map((stat) => <div key={stat.label} className="border-r border-[#d8e3d7] px-1 py-3 text-center last:border-r-0 sm:py-3.5"><p className="text-[11px] font-bold tracking-tight text-[#526c55] sm:text-xs">{stat.label}</p><p className="mt-1 text-base font-extrabold tabular-nums text-[#19351d] sm:text-lg">{stat.value}</p></div>)}</div>
-        <div onClick={() => inputRef.current?.focus()} className="mx-auto mt-5 max-w-3xl cursor-text text-center" role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") inputRef.current?.focus(); }}><p className="text-xs font-semibold text-[#7b897b]">아래 나라 이름을 보고 그대로 타이핑하세요</p><div className="mt-2 border-y-4 border-[#3b9d44] py-3"><p className="text-3xl font-bold tracking-[.15em] text-[#273b29] sm:text-5xl">{target}</p><div className="mt-3 flex justify-center gap-2 text-2xl font-bold sm:text-3xl">{Array.from(target).map((char, charIndex) => <span key={`${char}-${charIndex}`} className={`grid h-10 min-w-10 place-items-center rounded-lg ${inputValue[charIndex] === char ? "bg-[#e5f5e6] text-[#2b9138]" : inputValue[charIndex] ? "bg-[#fff0ee] text-[#df5145]" : "bg-[#f2f5f1] text-[#bbc5bb]"}`}>{inputValue[charIndex] || char}</span>)}</div><p className="mt-2 text-xs font-medium tracking-wide text-[#829082]">{current.english}</p></div></div>
-        <input ref={inputRef} value={inputValue} onChange={onInput} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={onCompositionEnd} className="sr-only" aria-label="나라 이름 입력" autoComplete="off" /><p className="mt-4 text-center text-[11px] text-[#8a968a]">글자 단위로 입력 진행을 확인할 수 있어요</p></div>
-    </section>
-  </main>;
+  return (
+    <main className="flex min-h-screen flex-col overflow-hidden bg-[#edf3ec] text-[#17231a]">
+      <header className="flex h-16 shrink-0 items-center justify-between border-b border-[#d7e2d5] bg-white px-5 sm:px-8">
+        <div className="flex items-center gap-3">
+          <Link to="/" className="grid h-9 w-9 place-items-center rounded-[11px] bg-[#3b9d44] text-sm font-black text-white">
+            T
+          </Link>
+          <div>
+            <p className="text-sm font-bold">Country Typing</p>
+            <p className="text-[10px] font-medium text-[#809080]">세계시민과 지리 · 나라 이름 연습</p>
+          </div>
+        </div>
+        <p className="hidden font-mono text-[11px] text-[#778778] sm:block">LESSON 01 / WORLD MAP</p>
+      </header>
+      <section className="relative flex min-h-0 flex-1 flex-col">
+        <div className="flex items-center justify-between bg-white/90 px-5 py-3 sm:px-10">
+          <p className="text-sm font-semibold text-[#3b9d44]">
+            {String(index + 1).padStart(2, "0")} <span className="font-normal text-[#95a295]">/ {String(lesson.length).padStart(2, "0")} 국가</span>
+          </p>
+          <p className="text-xs text-[#748174]">나라의 위치를 보고 이름을 입력하세요.</p>
+        </div>
+        <div className="relative z-0 h-[58vh] min-h-[440px] shrink-0 overflow-hidden bg-[#dce8db]">
+          <MapFrames index={index} loaded={loaded} onLoaded={markLoaded} isFixedMap={isFixedMap} />
+          <div className="pointer-events-none absolute bottom-5 left-1/2 z-30 hidden -translate-x-1/2 rounded-full bg-white/95 px-5 py-2 text-[11px] font-semibold text-[#5d6e5f] shadow-lg sm:block">
+            지도에서 나라의 윤곽과 주변 지역을 살펴보세요
+          </div>
+          <div className="absolute right-3 top-3 z-30 flex max-w-[calc(100%-24px)] flex-wrap justify-end gap-2 sm:right-10 sm:top-5">
+            <button
+              onClick={() => setIsFixedMap((value) => !value)}
+              className="rounded-full bg-[#17231a] px-3 py-2 text-xs font-bold text-white shadow-md transition-colors hover:bg-[#2c3e2e]"
+            >
+              {isFixedMap ? "🔍 상세 확대" : "🗺️ 넓은 지도"}
+            </button>
+            <div className="flex rounded-full bg-white p-1 shadow-md">
+              <button
+                onClick={() => setLanguage("ko")}
+                className={`rounded-full px-2.5 py-1 text-xs font-bold ${language === "ko" ? "bg-[#3b9d44] text-white" : "text-[#607160]"}`}
+              >
+                한국어
+              </button>
+              <button
+                onClick={() => setLanguage("en")}
+                className={`rounded-full px-2.5 py-1 text-xs font-bold ${language === "en" ? "bg-[#3b9d44] text-white" : "text-[#607160]"}`}
+              >
+                English
+              </button>
+            </div>
+            <button
+              onClick={() => {
+                setTyped("");
+                setInputValue("");
+                inputRef.current?.focus();
+              }}
+              className="rounded-full bg-white px-3 py-2 text-xs font-bold text-[#4a5b4c] shadow-sm transition hover:bg-gray-50"
+            >
+              다시 입력
+            </button>
+          </div>
+        </div>
+        <div className="relative z-50 shrink-0 border-t border-[#cfe0cf] bg-white px-4 pb-5 pt-0 shadow-[0_-10px_28px_rgba(24,52,28,.10)] sm:px-8">
+          <div className="mx-auto -mt-6 grid max-w-2xl grid-cols-4 overflow-hidden rounded-2xl border border-[#cbd9ca] bg-white shadow-[0_8px_24px_rgba(32,67,35,.18)]">
+            {[
+              { label: "시간", value: time },
+              { label: "분당 타수", value: typedPerMinute },
+              { label: "정확도", value: `${accuracy}%` },
+              { label: "정답", value: correct },
+            ].map((stat) => (
+              <div key={stat.label} className="border-r border-[#d8e3d7] px-1 py-3 text-center last:border-r-0 sm:py-3.5">
+                <p className="text-[11px] font-bold tracking-tight text-[#526c55] sm:text-xs">{stat.label}</p>
+                <p className="mt-1 text-base font-extrabold tabular-nums text-[#19351d] sm:text-lg">{stat.value}</p>
+              </div>
+            ))}
+          </div>
+          <div
+            onClick={() => inputRef.current?.focus()}
+            className="mx-auto mt-5 max-w-3xl cursor-text text-center"
+            role="button"
+            tabIndex={0}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") inputRef.current?.focus();
+            }}
+          >
+            <p className="text-xs font-semibold text-[#7b897b]">아래 나라 이름을 보고 그대로 타이핑하세요</p>
+            <div className="mt-2 border-y-4 border-[#3b9d44] py-3">
+              <p className="text-3xl font-bold tracking-[.15em] text-[#273b29] sm:text-5xl">{target}</p>
+              <div className="mt-3 flex justify-center gap-2 text-2xl font-bold sm:text-3xl">
+                {Array.from(target).map((char, charIndex) => (
+                  <span
+                    key={`${char}-${charIndex}`}
+                    className={`grid h-10 min-w-10 place-items-center rounded-lg ${
+                      inputValue[charIndex] === char
+                        ? "bg-[#e5f5e6] text-[#2b9138]"
+                        : inputValue[charIndex]
+                        ? "bg-[#fff0ee] text-[#df5145]"
+                        : "bg-[#f2f5f1] text-[#bbc5bb]"
+                    }`}
+                  >
+                    {inputValue[charIndex] || char}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-2 text-xs font-medium tracking-wide text-[#829082]">{current.english}</p>
+            </div>
+          </div>
+          <input
+            ref={inputRef}
+            value={inputValue}
+            onChange={onInput}
+            onCompositionStart={() => {
+              composing.current = true;
+            }}
+            onCompositionEnd={onCompositionEnd}
+            className="sr-only"
+            aria-label="나라 이름 입력"
+            autoComplete="off"
+          />
+          <p className="mt-4 text-center text-[11px] text-[#8a968a]">글자 단위로 입력 진행을 확인할 수 있어요</p>
+        </div>
+      </section>
+    </main>
+  );
 }
 
 function Launcher() {
-  return <main className="min-h-screen overflow-hidden bg-[#17342f] px-5 py-7 text-white sm:px-10 sm:py-10"><div className="mx-auto max-w-6xl"><header className="flex items-center justify-between"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#e4f252] text-lg font-black text-[#17342f]">G</span><p className="text-lg font-bold tracking-tight">Geo Playroom</p></div><p className="font-mono text-[10px] tracking-[.18em] text-[#b6d3be]">LEARN BY PLAYING</p></header><section className="mt-16 max-w-3xl sm:mt-24"><p className="font-mono text-xs tracking-[.18em] text-[#e4f252]">WORLD · WEATHER · WORDS</p><h1 className="mt-4 text-5xl font-bold leading-[.95] tracking-[-.06em] sm:text-7xl">지도를 읽고,<br />기후를 놀다.</h1><p className="mt-6 max-w-xl text-base leading-relaxed text-[#bfd5c3]">나라 이름을 손끝으로 익히고, 작은 기후 요소를 합쳐 거대한 날씨 현상을 만들어 보세요.</p></section><section className="mt-12 grid gap-5 lg:grid-cols-[1.2fr_.8fr]"><Link to="/typing" className="group relative min-h-[310px] overflow-hidden rounded-[28px] bg-[#dff3e3] p-7 text-[#17342f] transition hover:-translate-y-1"><div className="absolute -right-12 -top-12 h-64 w-64 rounded-full bg-[#9ad5b0] opacity-70 transition group-hover:scale-110" /><p className="relative font-mono text-xs font-bold tracking-widest text-[#3b9d44]">01 · COUNTRY TYPING</p><h2 className="relative mt-10 text-4xl font-bold tracking-[-.05em]">나라 이름<br />타자연습</h2><p className="relative mt-3 max-w-xs text-sm text-[#52725a]">한글 또는 영어로, 지도 위 나라를 빠르게 익히는 연습.</p><span className="absolute bottom-7 right-7 grid h-12 w-12 place-items-center rounded-full bg-[#17342f] text-xl text-white transition group-hover:translate-x-1">→</span></Link><Link to="/climate" className="group relative min-h-[310px] overflow-hidden rounded-[28px] bg-[#f39b66] p-7 text-[#442116] transition hover:-translate-y-1"><div className="absolute -bottom-20 -right-12 h-64 w-64 rounded-full bg-[#e9534b] opacity-80 transition group-hover:scale-110" /><p className="relative font-mono text-xs font-bold tracking-widest text-[#793120]">02 · CLIMATE MERGE</p><h2 className="relative mt-10 text-4xl font-bold tracking-[-.05em]">기후 수박게임</h2><p className="relative mt-3 max-w-xs text-sm text-[#6f3527]">작은 기후 요소를 떨어뜨리고, 같은 요소끼리 합쳐 보세요.</p><span className="absolute bottom-7 right-7 grid h-12 w-12 place-items-center rounded-full bg-[#442116] text-xl text-white transition group-hover:translate-x-1">↓</span></Link></section></div></main>;
+  return (
+    <main className="min-h-screen overflow-hidden bg-[#17342f] px-5 py-7 text-white sm:px-10 sm:py-10">
+      <div className="mx-auto max-w-6xl">
+        <header className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#e4f252] text-lg font-black text-[#17342f]">G</span>
+            <p className="text-lg font-bold tracking-tight">Geo Playroom</p>
+          </div>
+          <p className="font-mono text-[10px] tracking-[.18em] text-[#b6d3be]">LEARN BY PLAYING</p>
+        </header>
+        <section className="mt-16 max-w-3xl sm:mt-24">
+          <p className="font-mono text-xs tracking-[.18em] text-[#e4f252]">WORLD · WEATHER · WORDS</p>
+          <h1 className="mt-4 text-5xl font-bold leading-[.95] tracking-[-.06em] sm:text-7xl">
+            지도를 읽고,<br />기후를 놀다.
+          </h1>
+          <p className="mt-6 max-w-xl text-base leading-relaxed text-[#bfd5c3]">
+            나라 이름을 손끝으로 익히고, 작은 기후 요소를 합쳐 거대한 날씨 현상을 만들어 보세요.
+          </p>
+        </section>
+        <section className="mt-12 grid gap-5 lg:grid-cols-[1.2fr_.8fr]">
+          <Link
+            to="/typing"
+            className="group relative min-h-[310px] overflow-hidden rounded-[28px] bg-[#dff3e3] p-7 text-[#17342f] transition hover:-translate-y-1"
+          >
+            <div className="absolute -right-12 -top-12 h-64 w-64 rounded-full bg-[#9ad5b0] opacity-70 transition group-hover:scale-110" />
+            <p className="relative font-mono text-xs font-bold tracking-widest text-[#3b9d44]">01 · COUNTRY TYPING</p>
+            <h2 className="relative mt-10 text-4xl font-bold tracking-[-.05em]">
+              나라 이름<br />타자연습
+            </h2>
+            <p className="relative mt-3 max-w-xs text-sm text-[#52725a]">한글 또는 영어로, 지도 위 나라를 빠르게 익히는 연습.</p>
+            <span className="absolute bottom-7 right-7 grid h-12 w-12 place-items-center rounded-full bg-[#17342f] text-xl text-white transition group-hover:translate-x-1">
+              →
+            </span>
+          </Link>
+          <Link
+            to="/climate"
+            className="group relative min-h-[310px] overflow-hidden rounded-[28px] bg-[#f39b66] p-7 text-[#442116] transition hover:-translate-y-1"
+          >
+            <div className="absolute -bottom-20 -right-12 h-64 w-64 rounded-full bg-[#e9534b] opacity-80 transition group-hover:scale-110" />
+            <p className="relative font-mono text-xs font-bold tracking-widest text-[#793120]">02 · CLIMATE MERGE</p>
+            <h2 className="relative mt-10 text-4xl font-bold tracking-[-.05em]">기후 수박게임</h2>
+            <p className="relative mt-3 max-w-xs text-sm text-[#6f3527]">작은 기후 요소를 떨어뜨리고, 같은 요소끼리 합쳐 보세요.</p>
+            <span className="absolute bottom-7 right-7 grid h-12 w-12 place-items-center rounded-full bg-[#442116] text-xl text-white transition group-hover:translate-x-1">
+              ↓
+            </span>
+          </Link>
+        </section>
+      </div>
+    </main>
+  );
 }
 
 type ClimatePiece = { id: number; level: number; x: number; y: number; velocity: number };
-const climates = [{ name: "이슬", icon: "💧", color: "#91d5f0", size: 36 }, { name: "구름", icon: "☁️", color: "#d9e0e7", size: 50 }, { name: "바람", icon: "〰", color: "#9fd5ba", size: 62 }, { name: "비", icon: "🌧️", color: "#78a8e8", size: 76 }, { name: "폭풍", icon: "🌀", color: "#a28ce4", size: 94 }, { name: "태풍", icon: "🌪️", color: "#6d5a91", size: 112 }];
+const climates = [
+  { name: "이슬", icon: "💧", color: "#91d5f0", size: 36 },
+  { name: "구름", icon: "☁️", color: "#d9e0e7", size: 50 },
+  { name: "바람", icon: "〰", color: "#9fd5ba", size: 62 },
+  { name: "비", icon: "🌧️", color: "#78a8e8", size: 76 },
+  { name: "폭풍", icon: "🌀", color: "#a28ce4", size: 94 },
+  { name: "태풍", icon: "🌪️", color: "#6d5a91", size: 112 },
+];
 
 function ClimateMerge() {
   const [pieces, setPieces] = useState<ClimatePiece[]>([]);
@@ -195,34 +421,133 @@ function ClimateMerge() {
   const pieceId = useRef(0);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setPieces((current) => {
-      const fallen = current.map((piece) => ({ ...piece, velocity: Math.min(piece.velocity + 0.16, 2.8), y: Math.min(88, piece.y + piece.velocity) }));
-      const merged = new Set<number>(); const next: ClimatePiece[] = [];
-      for (let i = 0; i < fallen.length; i += 1) {
-        if (merged.has(fallen[i].id)) continue;
-        const match = fallen.find((other, otherIndex) => otherIndex > i && !merged.has(other.id) && other.level === fallen[i].level && other.level < climates.length - 1 && Math.hypot(other.x - fallen[i].x, other.y - fallen[i].y) < 9 + fallen[i].level * 2);
-        if (match) { merged.add(match.id); merged.add(fallen[i].id); next.push({ id: ++pieceId.current, level: fallen[i].level + 1, x: (fallen[i].x + match.x) / 2, y: Math.max(8, (fallen[i].y + match.y) / 2), velocity: 0.2 }); setScore((value) => value + (fallen[i].level + 1) * 10); } else next.push(fallen[i]);
-      }
-      return next;
-    }), 16);
+    const timer = window.setInterval(() => {
+      setPieces((current) => {
+        const fallen = current.map((piece) => ({
+          ...piece,
+          velocity: Math.min(piece.velocity + 0.16, 2.8),
+          y: Math.min(88, piece.y + piece.velocity),
+        }));
+        const merged = new Set<number>();
+        const next: ClimatePiece[] = [];
+        for (let i = 0; i < fallen.length; i += 1) {
+          if (merged.has(fallen[i].id)) continue;
+          const match = fallen.find(
+            (other, otherIndex) =>
+              otherIndex > i &&
+              !merged.has(other.id) &&
+              other.level === fallen[i].level &&
+              other.level < climates.length - 1 &&
+              Math.hypot(other.x - fallen[i].x, other.y - fallen[i].y) < 9 + fallen[i].level * 2
+          );
+          if (match) {
+            merged.add(match.id);
+            merged.add(fallen[i].id);
+            next.push({
+              id: ++pieceId.current,
+              level: fallen[i].level + 1,
+              x: (fallen[i].x + match.x) / 2,
+              y: Math.max(8, (fallen[i].y + match.y) / 2),
+              velocity: 0.2,
+            });
+            setScore((value) => value + (fallen[i].level + 1) * 10);
+          } else {
+            next.push(fallen[i]);
+          }
+        }
+        return next;
+      });
+    }, 16);
     return () => window.clearInterval(timer);
   }, []);
 
-  const drop = (event: React.PointerEvent<HTMLDivElement>) => {
-    const rect = boardRef.current?.getBoundingClientRect(); if (!rect) return;
+  const drop = (event: PointerEvent<HTMLDivElement>) => {
+    const rect = boardRef.current?.getBoundingClientRect();
+    if (!rect) return;
     const x = Math.max(8, Math.min(92, ((event.clientX - rect.left) / rect.width) * 100));
     setPieces((current) => [...current.slice(-26), { id: ++pieceId.current, level: nextLevel, x, y: 8, velocity: 0.4 }]);
     setNextLevel(Math.floor(Math.random() * 3));
   };
 
-  return <main className="min-h-screen bg-[#ffe7ca] px-4 py-5 text-[#3b241c] sm:px-8"><div className="mx-auto max-w-5xl"><header className="flex items-center justify-between"><Link to="/" className="rounded-full border border-[#d5a77e] px-4 py-2 text-xs font-bold">← 게임 선택</Link><div className="text-right"><p className="font-mono text-[10px] tracking-widest text-[#9a5a3e]">CLIMATE MERGE</p><p className="text-xl font-black">점수 {score}</p></div></header><div className="mt-5 grid gap-5 lg:grid-cols-[1fr_260px]"><section ref={boardRef} onPointerDown={drop} className="relative h-[68vh] min-h-[500px] touch-none overflow-hidden rounded-[30px] border-[6px] border-[#8e543b] bg-[linear-gradient(160deg,#78c6e6_0%,#b8e3ee_55%,#e3f0d7_56%,#d1e8b8_100%)] shadow-[inset_0_0_0_5px_rgba(255,255,255,.4)]"><div className="absolute inset-x-0 top-0 h-20 bg-white/20" /><p className="pointer-events-none absolute left-1/2 top-5 -translate-x-1/2 rounded-full bg-white/80 px-4 py-2 text-xs font-bold text-[#7b4b39]">빈 곳을 눌러 기후 요소를 떨어뜨리세요</p>{pieces.map((piece) => { const climate = climates[piece.level]; return <div key={piece.id} className="absolute grid -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-white/70 shadow-lg transition-transform" style={{ left: `${piece.x}%`, top: `${piece.y}%`, width: climate.size, height: climate.size, backgroundColor: climate.color, fontSize: climate.size * 0.48 }}><span>{climate.icon}</span><span className="absolute -bottom-5 whitespace-nowrap text-[10px] font-bold text-[#4b3329]">{climate.name}</span></div>; })}</section><aside className="rounded-[28px] bg-[#fff9ef] p-6"><p className="font-mono text-[11px] tracking-widest text-[#b96542]">NEXT DROP</p><div className="mx-auto mt-6 grid h-28 w-28 place-items-center rounded-full border-4 border-white shadow-[0_6px_16px_rgba(125,64,40,.18)]" style={{ backgroundColor: climates[nextLevel].color, fontSize: 48 }}>{climates[nextLevel].icon}</div><p className="mt-3 text-center font-bold">{climates[nextLevel].name}</p><div className="mt-8 border-t border-[#f0d6be] pt-5"><p className="text-sm font-bold">같은 기후끼리 합치세요</p><p className="mt-2 text-xs leading-relaxed text-[#926a58]">이슬 → 구름 → 바람 → 비 → 폭풍 → 태풍 순으로 더 큰 기후가 됩니다.</p></div><button onClick={() => { setPieces([]); setScore(0); }} className="mt-8 w-full rounded-xl bg-[#3b241c] py-3 text-sm font-bold text-white">새로 시작</button></aside></div></div></main>;
+  return (
+    <main className="min-h-screen bg-[#ffe7ca] px-4 py-5 text-[#3b241c] sm:px-8">
+      <div className="mx-auto max-w-5xl">
+        <header className="flex items-center justify-between">
+          <Link to="/" className="rounded-full border border-[#d5a77e] px-4 py-2 text-xs font-bold">
+            ← 게임 선택
+          </Link>
+          <div className="text-right">
+            <p className="font-mono text-[10px] tracking-widest text-[#9a5a3e]">CLIMATE MERGE</p>
+            <p className="text-xl font-black">점수 {score}</p>
+          </div>
+        </header>
+        <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_260px]">
+          <section
+            ref={boardRef}
+            onPointerDown={drop}
+            className="relative h-[68vh] min-h-[500px] touch-none overflow-hidden rounded-[30px] border-[6px] border-[#8e543b] bg-[linear-gradient(160deg,#78c6e6_0%,#b8e3ee_55%,#e3f0d7_56%,#d1e8b8_100%)] shadow-[inset_0_0_0_5px_rgba(255,255,255,.4)]"
+          >
+            <div className="absolute inset-x-0 top-0 h-20 bg-white/20" />
+            <p className="pointer-events-none absolute left-1/2 top-5 -translate-x-1/2 rounded-full bg-white/80 px-4 py-2 text-xs font-bold text-[#7b4b39]">
+              빈 곳을 눌러 기후 요소를 떨어뜨리세요
+            </p>
+            {pieces.map((piece) => {
+              const climate = climates[piece.level];
+              return (
+                <div
+                  key={piece.id}
+                  className="absolute grid -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-white/70 shadow-lg transition-transform"
+                  style={{
+                    left: `${piece.x}%`,
+                    top: `${piece.y}%`,
+                    width: climate.size,
+                    height: climate.size,
+                    backgroundColor: climate.color,
+                    fontSize: climate.size * 0.48,
+                  }}
+                >
+                  <span>{climate.icon}</span>
+                  <span className="absolute -bottom-5 whitespace-nowrap text-[10px] font-bold text-[#4b3329]">{climate.name}</span>
+                </div>
+              );
+            })}
+          </section>
+          <aside className="rounded-[28px] bg-[#fff9ef] p-6">
+            <p className="font-mono text-[11px] tracking-widest text-[#b96542]">NEXT DROP</p>
+            <div
+              className="mx-auto mt-6 grid h-28 w-28 place-items-center rounded-full border-4 border-white shadow-[0_6px_16px_rgba(125,64,40,.18)]"
+              style={{ backgroundColor: climates[nextLevel].color, fontSize: 48 }}
+            >
+              {climates[nextLevel].icon}
+            </div>
+            <p className="mt-3 text-center font-bold">{climates[nextLevel].name}</p>
+            <div className="mt-8 border-t border-[#f0d6be] pt-5">
+              <p className="text-sm font-bold">같은 기후끼리 합치세요</p>
+              <p className="mt-2 text-xs leading-relaxed text-[#926a58]">이슬 → 구름 → 바람 → 비 → 폭풍 → 태풍 순으로 더 큰 기후가 됩니다.</p>
+            </div>
+            <button
+              onClick={() => {
+                setPieces([]);
+                setScore(0);
+              }}
+              className="mt-8 w-full rounded-xl bg-[#3b241c] py-3 text-sm font-bold text-white"
+            >
+              새로 시작
+            </button>
+          </aside>
+        </div>
+      </div>
+    </main>
+  );
 }
 
 const router = createBrowserRouter([
-  { path: "/", Component: Launcher },
-  { path: "/typing", Component: CountryTyping },
-  { path: "/climate", Component: ClimateMerge },
-  { path: "*", Component: Launcher },
+  { path: "/", element: <Launcher /> },
+  { path: "/typing", element: <CountryTyping /> },
+  { path: "/climate", element: <ClimateMerge /> },
+  { path: "*", element: <Launcher /> },
 ]);
 
-export default function App() { return <RouterProvider router={router} />; }
+export default function App() {
+  return <RouterProvider router={router} />;
+}
