@@ -118,8 +118,7 @@ function CountryTyping() {
     advancing.current = false;
     setTyped("");
     setInputValue("");
-    // 모바일 지원: 화면 전환 시 포커스 잡기
-    setTimeout(() => inputRef.current?.focus(), 100);
+    inputRef.current?.focus();
   }, [index, language]);
 
   const markLoaded = useCallback((code: string) => setLoaded((value) => (value[code] ? value : { ...value, [code]: true })), []);
@@ -291,12 +290,26 @@ function CountryTyping() {
             </button>
           </div>
         </div>
-        <div 
-          onClick={focusInput}
-          onTouchStart={focusInput}
-          className="relative z-50 shrink-0 border-t border-[#cfe0cf] bg-white px-4 pb-6 pt-0 shadow-[0_-10px_28px_rgba(24,52,28,.10)] sm:px-8 cursor-pointer"
-        >
-          <div className="mx-auto -mt-6 grid max-w-2xl grid-cols-4 overflow-hidden rounded-2xl border border-[#cbd9ca] bg-white shadow-[0_8px_24px_rgba(32,67,35,.18)]">
+        <div className="relative z-50 shrink-0 border-t border-[#cfe0cf] bg-white px-4 pb-6 pt-0 shadow-[0_-10px_28px_rgba(24,52,28,.10)] sm:px-8">
+          {/* 실제 터치가 인식되는 모바일용 투명 input 영역 */}
+          <input
+            ref={inputRef}
+            value={inputValue}
+            onChange={onInput}
+            onCompositionStart={() => {
+              composing.current = true;
+            }}
+            onCompositionEnd={onCompositionEnd}
+            inputMode="text"
+            autoFocus
+            className="absolute inset-0 z-20 h-full w-full opacity-0 cursor-pointer"
+            aria-label="나라 이름 입력"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+          />
+          <div className="relative z-10 mx-auto -mt-6 grid max-w-2xl grid-cols-4 overflow-hidden rounded-2xl border border-[#cbd9ca] bg-white shadow-[0_8px_24px_rgba(32,67,35,.18)] pointer-events-none">
             {[
               { label: "시간", value: time },
               { label: "분당 타수", value: typedPerMinute },
@@ -309,8 +322,8 @@ function CountryTyping() {
               </div>
             ))}
           </div>
-          <div className="mx-auto mt-4 max-w-3xl text-center sm:mt-5">
-            <p className="text-xs font-semibold text-[#7b897b]">화면을 터치하고 아래 나라 이름을 타핑하세요</p>
+          <div className="relative z-10 mx-auto mt-4 max-w-3xl text-center sm:mt-5 pointer-events-none">
+            <p className="text-xs font-semibold text-[#7b897b]">화면 아래를 터치하여 키보드를 띄운 후 입력하세요</p>
             <div className="mt-2 border-y-2 border-[#3b9d44] py-2 sm:border-y-4 sm:py-3">
               <p className="text-2xl font-bold tracking-[.1em] text-[#273b29] sm:text-5xl sm:tracking-[.15em]">{target}</p>
               <div className="mt-2 flex flex-wrap justify-center gap-1.5 text-xl font-bold sm:mt-3 sm:gap-2 sm:text-3xl">
@@ -332,24 +345,7 @@ function CountryTyping() {
               <p className="mt-1.5 text-[11px] font-medium tracking-wide text-[#829082] sm:mt-2 sm:text-xs">{current.english}</p>
             </div>
           </div>
-          {/* 모바일 키보드 호환용 숨겨진 input */}
-          <input
-            ref={inputRef}
-            value={inputValue}
-            onChange={onInput}
-            onCompositionStart={() => {
-              composing.current = true;
-            }}
-            onCompositionEnd={onCompositionEnd}
-            inputMode="text"
-            className="absolute opacity-0 pointer-events-none h-0 w-0"
-            aria-label="나라 이름 입력"
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
-          />
-          <p className="mt-3 text-center text-[10px] text-[#8a968a] sm:mt-4 sm:text-[11px]">터치 시 스마트폰 가상 키보드가 나타납니다</p>
+          <p className="relative z-10 mt-3 text-center text-[10px] text-[#8a968a] sm:mt-4 sm:text-[11px] pointer-events-none">터치 시 스마트폰 가상 키보드가 정상적으로 작동합니다</p>
         </div>
       </section>
     </main>
