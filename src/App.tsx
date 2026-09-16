@@ -103,7 +103,6 @@ function CountryTyping() {
   const [errors, setErrors] = useState(0);
   const [loaded, setLoaded] = useState<Record<string, boolean>>({});
   const inputRef = useRef<HTMLInputElement>(null);
-  const composing = useRef(false);
   const advancing = useRef(false);
   const audioContext = useRef<AudioContext | null>(null);
   const current = lesson[index];
@@ -193,34 +192,33 @@ function CountryTyping() {
     setIndex((value) => (value + 1) % lesson.length);
   };
 
-  const commit = (next: string) => {
+  const processInput = (next: string) => {
     if (next === target) {
       advance();
       return;
     }
+
     if (target.startsWith(next)) {
       setTyped(next);
       setInputValue(next);
-      return;
+    } else {
+      if (next.length > typed.length) {
+        setErrors((value) => value + 1);
+      }
+      setInputValue(typed);
     }
-    if (next.length > typed.length) setErrors((value) => value + 1);
-    setInputValue(typed);
   };
 
   const onInput = (event: ChangeEvent<HTMLInputElement>) => {
     const next = event.target.value;
-    if (composing.current) {
-      setInputValue(next);
-      return;
+    if (next.length > inputValue.length) {
+      playKeySound();
     }
-    if (next.length > inputValue.length) playKeySound();
-    commit(next);
+    processInput(next);
   };
 
   const onCompositionEnd = (event: CompositionEvent<HTMLInputElement>) => {
-    composing.current = false;
-    if (event.currentTarget.value.length > typed.length) playKeySound();
-    commit(event.currentTarget.value);
+    processInput(event.currentTarget.value);
   };
 
   const focusInput = () => {
@@ -250,9 +248,9 @@ function CountryTyping() {
           <p className="text-sm font-semibold text-[#3b9d44]">
             {String(index + 1).padStart(2, "0")} <span className="font-normal text-[#95a295]">/ {String(lesson.length).padStart(2, "0")} 국가</span>
           </p>
-          <p className="text-xs text-[#748174]">터치/클릭 후 나라 이름을 입력하세요.</p>
+          <p className="text-xs text-[#748174]">입력창을 누르면 키보드가 열립니다.</p>
         </div>
-        <div className="relative z-0 h-[45vh] min-h-[300px] shrink-0 overflow-hidden bg-[#dce8db] sm:h-[58vh] sm:min-h-[440px]">
+        <div className="relative z-0 h-[40vh] min-h-[250px] shrink-0 overflow-hidden bg-[#dce8db] sm:h-[58vh] sm:min-h-[440px]">
           <MapFrames index={index} loaded={loaded} onLoaded={markLoaded} isFixedMap={isFixedMap} />
           <div className="pointer-events-none absolute bottom-5 left-1/2 z-30 hidden -translate-x-1/2 rounded-full bg-white/95 px-5 py-2 text-[11px] font-semibold text-[#5d6e5f] shadow-lg sm:block">
             지도에서 나라의 윤곽과 주변 지역을 살펴보세요
@@ -291,25 +289,7 @@ function CountryTyping() {
           </div>
         </div>
         <div className="relative z-50 shrink-0 border-t border-[#cfe0cf] bg-white px-4 pb-6 pt-0 shadow-[0_-10px_28px_rgba(24,52,28,.10)] sm:px-8">
-          {/* 실제 터치가 인식되는 모바일용 투명 input 영역 */}
-          <input
-            ref={inputRef}
-            value={inputValue}
-            onChange={onInput}
-            onCompositionStart={() => {
-              composing.current = true;
-            }}
-            onCompositionEnd={onCompositionEnd}
-            inputMode="text"
-            autoFocus
-            className="absolute inset-0 z-20 h-full w-full opacity-0 cursor-pointer"
-            aria-label="나라 이름 입력"
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
-          />
-          <div className="relative z-10 mx-auto -mt-6 grid max-w-2xl grid-cols-4 overflow-hidden rounded-2xl border border-[#cbd9ca] bg-white shadow-[0_8px_24px_rgba(32,67,35,.18)] pointer-events-none">
+          <div className="mx-auto -mt-6 grid max-w-2xl grid-cols-4 overflow-hidden rounded-2xl border border-[#cbd9ca] bg-white shadow-[0_8px_24px_rgba(32,67,35,.18)]">
             {[
               { label: "시간", value: time },
               { label: "분당 타수", value: typedPerMinute },
@@ -322,8 +302,8 @@ function CountryTyping() {
               </div>
             ))}
           </div>
-          <div className="relative z-10 mx-auto mt-4 max-w-3xl text-center sm:mt-5 pointer-events-none">
-            <p className="text-xs font-semibold text-[#7b897b]">화면 아래를 터치하여 키보드를 띄운 후 입력하세요</p>
+          <div className="mx-auto mt-4 max-w-3xl text-center sm:mt-5">
+            <p className="text-xs font-semibold text-[#7b897b]">아래 입력창을 터치하여 키보드로 나라 이름을 입력하세요</p>
             <div className="mt-2 border-y-2 border-[#3b9d44] py-2 sm:border-y-4 sm:py-3">
               <p className="text-2xl font-bold tracking-[.1em] text-[#273b29] sm:text-5xl sm:tracking-[.15em]">{target}</p>
               <div className="mt-2 flex flex-wrap justify-center gap-1.5 text-xl font-bold sm:mt-3 sm:gap-2 sm:text-3xl">
@@ -344,8 +324,23 @@ function CountryTyping() {
               </div>
               <p className="mt-1.5 text-[11px] font-medium tracking-wide text-[#829082] sm:mt-2 sm:text-xs">{current.english}</p>
             </div>
+
+            {/* 모바일 호환성을 위한 안심 직관적 입력창 */}
+            <div className="mt-4 flex justify-center">
+              <input
+                ref={inputRef}
+                value={inputValue}
+                onChange={onInput}
+                onCompositionEnd={onCompositionEnd}
+                placeholder="여기를 터치하여 타자 입력"
+                className="w-full max-w-md rounded-xl border-2 border-[#3b9d44] bg-[#f7faf7] px-4 py-3 text-center text-base font-bold text-[#17231a] shadow-inner focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#3b9d44]"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+              />
+            </div>
           </div>
-          <p className="relative z-10 mt-3 text-center text-[10px] text-[#8a968a] sm:mt-4 sm:text-[11px] pointer-events-none">터치 시 스마트폰 가상 키보드가 정상적으로 작동합니다</p>
         </div>
       </section>
     </main>
