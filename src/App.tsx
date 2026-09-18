@@ -1,5 +1,6 @@
-import { ChangeEvent, CompositionEvent, memo, PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, memo, PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserRouter, Link, RouterProvider } from "react-router-dom";
+import Matter from "matter-js";
 
 type Country = { code: string; korean: string; english: string; lat: number; lng: number; zoom: number };
 
@@ -64,7 +65,17 @@ const mapUrl = (country: Country, isFixed: boolean) => {
   return `https://maps.google.com/maps?q=${country.lat},${country.lng}&z=${zoom}&output=embed&hl=ko`;
 };
 
-const MapFrames = memo(function MapFrames({ index, loaded, onLoaded, isFixedMap }: { index: number; loaded: Record<string, boolean>; onLoaded: (code: string) => void; isFixedMap: boolean }) {
+const MapFrames = memo(function MapFrames({
+  index,
+  loaded,
+  onLoaded,
+  isFixedMap,
+}: {
+  index: number;
+  loaded: Record<string, boolean>;
+  onLoaded: (code: string) => void;
+  isFixedMap: boolean;
+}) {
   const visibleCountries = [lesson[index], lesson[(index + 1) % lesson.length]];
   const current = lesson[index];
   return (
@@ -125,7 +136,10 @@ function CountryTyping() {
     resetInput();
   }, [index, language, resetInput]);
 
-  const markLoaded = useCallback((code: string) => setLoaded((value) => (value[code] ? value : { ...value, [code]: true })), []);
+  const markLoaded = useCallback(
+    (code: string) => setLoaded((value) => (value[code] ? value : { ...value, [code]: true })),
+    []
+  );
 
   const getAudio = () => {
     if (!audioContext.current) audioContext.current = new AudioContext();
@@ -202,7 +216,10 @@ function CountryTyping() {
   };
 
   const accuracy = correct + errors === 0 ? 100 : Math.round((correct / (correct + errors)) * 100);
-  const typedPerMinute = useMemo(() => (elapsed ? Math.round(((correct * 4 + displayInput.length) / elapsed) * 60) : 0), [correct, elapsed, displayInput.length]);
+  const typedPerMinute = useMemo(
+    () => (elapsed ? Math.round(((correct * 4 + displayInput.length) / elapsed) * 60) : 0),
+    [correct, elapsed, displayInput.length]
+  );
   const time = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
 
   return (
@@ -222,7 +239,8 @@ function CountryTyping() {
       <section className="relative flex min-h-0 flex-1 flex-col">
         <div className="flex items-center justify-between bg-white/90 px-5 py-3 sm:px-10">
           <p className="text-sm font-semibold text-[#3b9d44]">
-            {String(index + 1).padStart(2, "0")} <span className="font-normal text-[#95a295]">/ {String(lesson.length).padStart(2, "0")} 국가</span>
+            {String(index + 1).padStart(2, "0")}{" "}
+            <span className="font-normal text-[#95a295]">/ {String(lesson.length).padStart(2, "0")} 국가</span>
           </p>
           <p className="text-xs text-[#748174]">입력창을 터치하여 키보드를 여세요.</p>
         </div>
@@ -295,8 +313,6 @@ function CountryTyping() {
               </div>
               <p className="mt-1.5 text-[11px] font-medium tracking-wide text-[#829082] sm:mt-2 sm:text-xs">{current.english}</p>
             </div>
-
-            {/* 모바일 키보드 직관적 입력창 */}
             <div className="mt-4 flex justify-center">
               <input
                 ref={inputRef}
@@ -331,7 +347,9 @@ function Launcher() {
         <section className="mt-12 max-w-3xl sm:mt-24">
           <p className="font-mono text-xs tracking-[.18em] text-[#e4f252]">WORLD · WEATHER · WORDS</p>
           <h1 className="mt-4 text-4xl font-bold leading-[.95] tracking-[-.06em] sm:text-7xl">
-            지도를 읽고,<br />기후를 놀다.
+            지도를 읽고,
+            <br />
+            기후를 놀다.
           </h1>
           <p className="mt-6 max-w-xl text-sm leading-relaxed text-[#bfd5c3] sm:text-base">
             나라 이름을 손끝으로 익히고, 작은 기후 요소를 합쳐 거대한 날씨 현상을 만들어 보세요.
@@ -345,7 +363,9 @@ function Launcher() {
             <div className="absolute -right-12 -top-12 h-64 w-64 rounded-full bg-[#9ad5b0] opacity-70 transition group-hover:scale-110" />
             <p className="relative font-mono text-xs font-bold tracking-widest text-[#3b9d44]">01 · COUNTRY TYPING</p>
             <h2 className="relative mt-8 text-3xl font-bold tracking-[-.05em] sm:mt-10 sm:text-4xl">
-              나라 이름<br />타자연습
+              나라 이름
+              <br />
+              타자연습
             </h2>
             <p className="relative mt-3 max-w-xs text-xs text-[#52725a] sm:text-sm">한글 또는 영어로, 지도 위 나라를 빠르게 익히는 연습.</p>
             <span className="absolute bottom-7 right-7 grid h-12 w-12 place-items-center rounded-full bg-[#17342f] text-xl text-white transition group-hover:translate-x-1">
@@ -359,7 +379,7 @@ function Launcher() {
             <div className="absolute -bottom-20 -right-12 h-64 w-64 rounded-full bg-[#e9534b] opacity-80 transition group-hover:scale-110" />
             <p className="relative font-mono text-xs font-bold tracking-widest text-[#793120]">02 · CLIMATE MERGE</p>
             <h2 className="relative mt-8 text-3xl font-bold tracking-[-.05em] sm:mt-10 sm:text-4xl">기후 수박게임</h2>
-            <p className="relative mt-3 max-w-xs text-xs text-[#6f3527] sm:text-sm">작은 기후 요소를 떨어뜨리고, 같은 요소끼리 합쳐 보세요.</p>
+            <p className="relative mt-3 max-w-xs text-xs text-[#6f3527] sm:text-sm">쾨펜 기후대를 합치며, 지구의 다섯 기후 권역을 익혀 보세요.</p>
             <span className="absolute bottom-7 right-7 grid h-12 w-12 place-items-center rounded-full bg-[#442116] text-xl text-white transition group-hover:translate-x-1">
               ↓
             </span>
@@ -370,139 +390,269 @@ function Launcher() {
   );
 }
 
-type ClimatePiece = { id: number; level: number; x: number; y: number; velocity: number };
+type ClimatePiece = { id: number; level: number; x: number; y: number; angle: number };
+type ClimateBody = Matter.Body & { climateIndex?: number; popped?: boolean };
 const climates = [
-  { name: "이슬", icon: "💧", color: "#91d5f0", size: 36 },
-  { name: "구름", icon: "☁️", color: "#d9e0e7", size: 50 },
-  { name: "바람", icon: "〰", color: "#9fd5ba", size: 62 },
-  { name: "비", icon: "🌧️", color: "#78a8e8", size: 76 },
-  { name: "폭풍", icon: "🌀", color: "#a28ce4", size: 94 },
-  { name: "태풍", icon: "🌪️", color: "#6d5a91", size: 112 },
+  { code: "Af", primary: "A 열대", secondary: "f 연중 습윤", tertiary: "—", name: "열대우림", icon: "🌴", color: "#e87555", size: 38, example: "싱가포르 · 아마존" },
+  { code: "Am", primary: "A 열대", secondary: "m 몬순", tertiary: "—", name: "열대몬순", icon: "🌦️", color: "#e99a4f", size: 46, example: "뭄바이 · 방글라데시" },
+  { code: "Aw", primary: "A 열대", secondary: "w 겨울 건조", tertiary: "—", name: "열대사바나", icon: "🦒", color: "#dfbd55", size: 54, example: "케냐 · 브라질 고원" },
+  { code: "BWh", primary: "B 건조", secondary: "W 사막", tertiary: "h 고온", name: "고온 사막", icon: "☀️", color: "#dba947", size: 62, example: "사하라 · 아라비아" },
+  { code: "BSh", primary: "B 건조", secondary: "S 스텝", tertiary: "h 고온", name: "고온 스텝", icon: "🏜️", color: "#cfa25b", size: 70, example: "사헬 · 몽골 남부" },
+  { code: "Cfa", primary: "C 온대", secondary: "f 연중 습윤", tertiary: "a 더운 여름", name: "온난 습윤", icon: "🌿", color: "#72ad72", size: 78, example: "한국 남부 · 상하이" },
+  { code: "Cfb", primary: "C 온대", secondary: "f 연중 습윤", tertiary: "b 따뜻한 여름", name: "서안 해양성", icon: "🌱", color: "#529877", size: 86, example: "영국 · 뉴질랜드" },
+  { code: "Dfb", primary: "D 냉대", secondary: "f 연중 습윤", tertiary: "b 따뜻한 여름", name: "냉대 습윤", icon: "🌲", color: "#5e94bf", size: 96, example: "캐나다 · 러시아" },
+  { code: "Dfc", primary: "D 냉대", secondary: "f 연중 습윤", tertiary: "c 서늘한 여름", name: "아한대", icon: "🏔️", color: "#6580b5", size: 106, example: "시베리아 · 알래스카" },
+  { code: "ET", primary: "E 한대", secondary: "T 툰드라", tertiary: "—", name: "툰드라", icon: "❄️", color: "#9ec7d1", size: 116, example: "그린란드 해안" },
+  { code: "EF", primary: "E 한대", secondary: "F 빙설", tertiary: "—", name: "빙설", icon: "🧊", color: "#d6e9ed", size: 128, example: "남극 · 그린란드 내륙" },
 ];
 
 function ClimateMerge() {
   const [pieces, setPieces] = useState<ClimatePiece[]>([]);
   const [nextLevel, setNextLevel] = useState(0);
   const [score, setScore] = useState(0);
+  const [gameOver, setGameOver] = useState(false);
+  const [ready, setReady] = useState(true);
+  const [previewX, setPreviewX] = useState(320);
   const boardRef = useRef<HTMLDivElement>(null);
-  const pieceId = useRef(0);
+  const engineRef = useRef<Matter.Engine | null>(null);
+  const runnerRef = useRef<Matter.Runner | null>(null);
+  const wallsRef = useRef<Matter.Body[]>([]);
+  const nextRef = useRef(0);
+  const readyRef = useRef(true);
+  const endedRef = useRef(false);
+  const scoreRef = useRef(0);
+  const highScoreRef = useRef(0);
+  const gameWidth = 640;
+  const gameHeight = 800;
+  const dangerLine = 96;
+
+  const learningStage = score < 60 ? 1 : score < 220 ? 2 : 3;
+  const randomDrop = useCallback((stageScore: number) => {
+    const range = stageScore < 60 ? 3 : stageScore < 220 ? 4 : 5;
+    return Math.floor(Math.random() * range);
+  }, []);
+
+  const syncPieces = useCallback(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    setPieces(
+      Matter.Composite.allBodies(engine.world)
+        .filter((body): body is ClimateBody => !body.isStatic && typeof (body as ClimateBody).climateIndex === "number")
+        .map((body) => ({ id: body.id, level: body.climateIndex!, x: body.position.x, y: body.position.y, angle: body.angle }))
+    );
+  }, []);
+
+  const makeClimateBody = useCallback((x: number, y: number, level: number) => {
+    const body = Matter.Bodies.circle(x, y, climates[level].size / 2, {
+      friction: 0.006,
+      frictionStatic: 0.006,
+      frictionAir: 0.002,
+      restitution: 0.1,
+      label: "climate-piece",
+    }) as ClimateBody;
+    body.climateIndex = level;
+    body.popped = false;
+    return body;
+  }, []);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      setPieces((current) => {
-        const fallen = current.map((piece) => ({
-          ...piece,
-          velocity: Math.min(piece.velocity + 0.16, 2.8),
-          y: Math.min(88, piece.y + piece.velocity),
-        }));
-        const merged = new Set<number>();
-        const next: ClimatePiece[] = [];
-        for (let i = 0; i < fallen.length; i += 1) {
-          if (merged.has(fallen[i].id)) continue;
-          const match = fallen.find(
-            (other, otherIndex) =>
-              otherIndex > i &&
-              !merged.has(other.id) &&
-              other.level === fallen[i].level &&
-              other.level < climates.length - 1 &&
-              Math.hypot(other.x - fallen[i].x, other.y - fallen[i].y) < 9 + fallen[i].level * 2
-          );
-          if (match) {
-            merged.add(match.id);
-            merged.add(fallen[i].id);
-            next.push({
-              id: ++pieceId.current,
-              level: fallen[i].level + 1,
-              x: (fallen[i].x + match.x) / 2,
-              y: Math.max(8, (fallen[i].y + match.y) / 2),
-              velocity: 0.2,
-            });
-            setScore((value) => value + (fallen[i].level + 1) * 10);
-          } else {
-            next.push(fallen[i]);
-          }
+    const engine = Matter.Engine.create({ gravity: { x: 0, y: 1.15, scale: 0.001 } });
+    const runner = Matter.Runner.create();
+    const wallOptions = { isStatic: true, friction: 0.006, restitution: 0.1, label: "wall" };
+    const walls = [
+      Matter.Bodies.rectangle(-32, gameHeight / 2, 64, gameHeight, wallOptions),
+      Matter.Bodies.rectangle(gameWidth + 32, gameHeight / 2, 64, gameHeight, wallOptions),
+      Matter.Bodies.rectangle(gameWidth / 2, gameHeight + 18, gameWidth, 64, wallOptions),
+    ];
+    engineRef.current = engine;
+    runnerRef.current = runner;
+    wallsRef.current = walls;
+    Matter.Composite.add(engine.world, walls);
+    Matter.Runner.run(runner, engine);
+    const updateView = window.setInterval(syncPieces, 32);
+
+    const endGame = () => {
+      if (endedRef.current) return;
+      endedRef.current = true;
+      readyRef.current = false;
+      setReady(false);
+      setGameOver(true);
+      highScoreRef.current = Math.max(highScoreRef.current, scoreRef.current);
+      Matter.Runner.stop(runner);
+    };
+
+    const onCollision = (event: Matter.IEventCollision<Matter.Engine>) => {
+      for (const { bodyA, bodyB } of event.pairs) {
+        const a = bodyA as ClimateBody;
+        const b = bodyB as ClimateBody;
+        if (a.isStatic || b.isStatic) continue;
+        if (a.position.y - (a.circleRadius ?? 0) < dangerLine || b.position.y - (b.circleRadius ?? 0) < dangerLine) {
+          endGame();
+          return;
         }
-        return next;
-      });
-    }, 16);
-    return () => window.clearInterval(timer);
-  }, []);
+        if (a.climateIndex === undefined || b.climateIndex === undefined || a.climateIndex !== b.climateIndex || a.popped || b.popped) continue;
+        if (a.climateIndex >= climates.length - 1) continue;
+        a.popped = true;
+        b.popped = true;
+        const level = a.climateIndex + 1;
+        const merged = makeClimateBody((a.position.x + b.position.x) / 2, (a.position.y + b.position.y) / 2, level);
+        Matter.Composite.remove(engine.world, [a, b]);
+        Matter.Composite.add(engine.world, merged);
+        const earned = (level + 1) * 10;
+        scoreRef.current += earned;
+        setScore(scoreRef.current);
+      }
+    };
+    Matter.Events.on(engine, "collisionStart", onCollision);
+    return () => {
+      window.clearInterval(updateView);
+      Matter.Events.off(engine, "collisionStart", onCollision);
+      Matter.Runner.stop(runner);
+      Matter.Engine.clear(engine);
+    };
+  }, [makeClimateBody, syncPieces]);
 
   const drop = (event: PointerEvent<HTMLDivElement>) => {
     const rect = boardRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const x = Math.max(8, Math.min(92, ((event.clientX - rect.left) / rect.width) * 100));
-    setPieces((current) => [...current.slice(-26), { id: ++pieceId.current, level: nextLevel, x, y: 8, velocity: 0.4 }]);
-    setNextLevel(Math.floor(Math.random() * 3));
+    if (!readyRef.current || endedRef.current || !engineRef.current) return;
+    const x = Math.max(30, Math.min(gameWidth - 30, ((event.clientX - rect.left) / rect.width) * gameWidth));
+    const level = nextRef.current;
+    Matter.Composite.add(engineRef.current.world, makeClimateBody(x, 42, level));
+    readyRef.current = false;
+    setReady(false);
+    const following = randomDrop(scoreRef.current);
+    nextRef.current = following;
+    setNextLevel(following);
+    window.setTimeout(() => {
+      if (!endedRef.current) { readyRef.current = true; setReady(true); }
+    }, 420);
+  };
+
+  const resetGame = () => {
+    const engine = engineRef.current;
+    const runner = runnerRef.current;
+    if (!engine || !runner) return;
+    Matter.Composite.clear(engine.world, false, true);
+    Matter.Composite.add(engine.world, wallsRef.current);
+    scoreRef.current = 0;
+    endedRef.current = false;
+    readyRef.current = true;
+    nextRef.current = randomDrop(0);
+    setPieces([]); setScore(0); setGameOver(false); setReady(true); setNextLevel(nextRef.current);
+    Matter.Runner.run(runner, engine);
   };
 
   return (
-    <main className="min-h-screen bg-[#ffe7ca] px-4 py-5 text-[#3b241c] sm:px-8">
-      <div className="mx-auto max-w-5xl">
-        <header className="flex items-center justify-between">
-          <Link to="/" className="rounded-full border border-[#d5a77e] px-4 py-2 text-xs font-bold">
+    <main className="min-h-screen bg-[#f4ead4] px-4 py-5 text-[#17342f] sm:px-8 sm:py-7">
+      <div className="mx-auto max-w-6xl">
+        <header className="flex items-center justify-between gap-4">
+          <Link to="/" className="rounded-full border border-[#c6b58e] bg-[#fffaf0] px-4 py-2 text-xs font-bold transition hover:bg-white">
             ← 게임 선택
           </Link>
-          <div className="text-right">
-            <p className="font-mono text-[10px] tracking-widest text-[#9a5a3e]">CLIMATE MERGE</p>
-            <p className="text-xl font-black">점수 {score}</p>
+          <div className="text-right leading-tight">
+            <p className="font-mono text-[10px] tracking-[.16em] text-[#5b7d58]">KÖPPEN CLIMATE MERGE</p>
+            <p className="mt-1 text-xl font-black tabular-nums">점수 <span className="text-[#cf6349]">{score}</span></p>
           </div>
         </header>
-        <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_260px]">
+        <section className="mt-7 flex flex-wrap items-end justify-between gap-4 border-b border-[#cabf9f] pb-5">
+          <div>
+            <p className="font-mono text-[10px] font-bold tracking-[.18em] text-[#668861]">WORLD CLIMATE ATLAS · 01</p>
+            <h1 className="mt-2 text-3xl font-black tracking-[-.055em] sm:text-4xl">쾨펜 기후 합치기</h1>
+          </div>
+          <p className="max-w-sm text-xs leading-relaxed text-[#637565] sm:text-sm">무료 수박게임의 물리 규칙으로 재구성했습니다. 점수가 오르면 1차, 2차, 3차 구분이 차례로 해금됩니다.</p>
+        </section>
+        <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
           <section
             ref={boardRef}
+            onPointerMove={(event) => {
+              const rect = boardRef.current?.getBoundingClientRect();
+              if (rect && ready) setPreviewX(Math.max(30, Math.min(gameWidth - 30, ((event.clientX - rect.left) / rect.width) * gameWidth)));
+            }}
             onPointerDown={drop}
-            className="relative h-[60vh] min-h-[400px] touch-none overflow-hidden rounded-[30px] border-[6px] border-[#8e543b] bg-[linear-gradient(160deg,#78c6e6_0%,#b8e3ee_55%,#e3f0d7_56%,#d1e8b8_100%)] shadow-[inset_0_0_0_5px_rgba(255,255,255,.4)] sm:h-[68vh] sm:min-h-[500px]"
+            className="relative h-[59vh] min-h-[420px] touch-none overflow-hidden rounded-[26px] border-[6px] border-[#315c4f] bg-[radial-gradient(circle_at_20%_10%,rgba(255,255,255,.62),transparent_24%),linear-gradient(162deg,#b7deeb_0%,#d8ece5_46%,#d9e8b5_47%,#bdd89a_100%)] shadow-[inset_0_0_0_4px_rgba(255,255,255,.48),0_13px_0_#24463c] sm:h-[67vh] sm:min-h-[520px]"
           >
-            <div className="absolute inset-x-0 top-0 h-20 bg-white/20" />
-            <p className="pointer-events-none absolute left-1/2 top-5 -translate-x-1/2 rounded-full bg-white/80 px-4 py-2 text-xs font-bold text-[#7b4b39]">
-              빈 곳을 눌러 기후 요소를 떨어뜨리세요
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,rgba(255,255,255,.35),transparent)]" />
+            <div className="pointer-events-none absolute inset-x-0 top-[18%] z-10 border-t-2 border-dashed border-[#d45d53]/70" />
+            <p className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2 whitespace-nowrap rounded-full border border-white/70 bg-[#fffdf5]/85 px-4 py-2 text-xs font-bold text-[#315c4f] shadow-sm">
+              {ready ? "위치를 고르고 눌러 조각을 떨어뜨리세요" : "조각이 착지하는 중…"}
             </p>
+            <p className="pointer-events-none absolute left-5 top-[18%] z-10 -translate-y-1/2 bg-[#fff8ed]/85 px-1.5 font-mono text-[9px] font-bold tracking-[.16em] text-[#bd4f49]">DANGER LINE</p>
+            <p className="pointer-events-none absolute bottom-4 left-5 font-mono text-[9px] tracking-[.22em] text-[#315c4f]/60">MERGE ZONE · CLIMATE BELTS</p>
+            {ready && !gameOver && <div className="pointer-events-none absolute top-[42px] z-20 -translate-x-1/2" style={{ left: `${(previewX / gameWidth) * 100}%` }}><div className="h-10 border-l-2 border-dashed border-[#315c4f]/55" /><div className="grid h-9 w-9 -translate-x-[17px] place-items-center rounded-full border-2 border-white/80 text-lg shadow-md" style={{ backgroundColor: climates[nextLevel].color }}>{climates[nextLevel].icon}</div></div>}
             {pieces.map((piece) => {
               const climate = climates[piece.level];
+              const stageLabel = learningStage === 1 ? climate.primary : learningStage === 2 ? `${climate.primary} · ${climate.secondary}` : `${climate.code} · ${climate.name}`;
               return (
                 <div
                   key={piece.id}
-                  className="absolute grid -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-white/70 shadow-lg transition-transform"
+                  className="absolute grid -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-[3px] border-white/80 shadow-[0_7px_0_rgba(28,72,62,.22),0_12px_22px_rgba(28,72,62,.18)] transition-transform"
                   style={{
-                    left: `${piece.x}%`,
-                    top: `${piece.y}%`,
-                    width: climate.size,
-                    height: climate.size,
+                    left: `${(piece.x / gameWidth) * 100}%`,
+                    top: `${(piece.y / gameHeight) * 100}%`,
+                    width: `${(climate.size / gameWidth) * 100}%`,
+                    height: `${(climate.size / gameWidth) * 100}%`,
                     backgroundColor: climate.color,
-                    fontSize: climate.size * 0.48,
+                    fontSize: `${climate.size * 0.48}px`,
+                    transform: `translate(-50%, -50%) rotate(${piece.angle}rad)`,
                   }}
                 >
                   <span>{climate.icon}</span>
-                  <span className="absolute -bottom-5 whitespace-nowrap text-[10px] font-bold text-[#4b3329]">{climate.name}</span>
+                  <span className="absolute -bottom-5 whitespace-nowrap rounded-full bg-[#fffdf5]/90 px-2 py-0.5 text-[9px] font-bold text-[#274b42] shadow-sm">{stageLabel}</span>
                 </div>
               );
             })}
           </section>
-          <aside className="rounded-[28px] bg-[#fff9ef] p-6">
-            <p className="font-mono text-[11px] tracking-widest text-[#b96542]">NEXT DROP</p>
+          <aside className="rounded-[24px] border border-[#d9cca8] bg-[#fffaf0] p-5 shadow-[0_10px_24px_rgba(76,91,54,.08)] sm:p-6">
+            <p className="font-mono text-[10px] font-bold tracking-[.16em] text-[#668861]">NEXT CLIMATE</p>
             <div
-              className="mx-auto mt-6 grid h-28 w-28 place-items-center rounded-full border-4 border-white shadow-[0_6px_16px_rgba(125,64,40,.18)]"
+              className="mx-auto mt-5 grid h-28 w-28 place-items-center rounded-full border-4 border-white shadow-[0_7px_0_rgba(28,72,62,.16),0_12px_18px_rgba(28,72,62,.12)]"
               style={{ backgroundColor: climates[nextLevel].color, fontSize: 48 }}
             >
               {climates[nextLevel].icon}
             </div>
-            <p className="mt-3 text-center font-bold">{climates[nextLevel].name}</p>
-            <div className="mt-8 border-t border-[#f0d6be] pt-5">
-              <p className="text-sm font-bold">같은 기후끼리 합치세요</p>
-              <p className="mt-2 text-xs leading-relaxed text-[#926a58]">이슬 → 구름 → 바람 → 비 → 폭풍 → 태풍 순으로 더 큰 기후가 됩니다.</p>
+            <p className="mt-3 text-center font-black">{climates[nextLevel].code} · {climates[nextLevel].name}</p>
+            <p className="mt-1 text-center text-[11px] text-[#6e806d]">{climates[nextLevel].example}</p>
+            <div className="mt-6 border-t border-[#e2d7ba] pt-5">
+              <p className="text-sm font-bold">학습 난이도 · {learningStage}단계</p>
+              <div className="mt-3 grid grid-cols-3 gap-1 text-center text-[9px] font-bold">
+                <span className={`rounded-md px-1 py-1.5 ${learningStage >= 1 ? "bg-[#e7f0dc]" : "bg-[#eee9dc] text-[#9e9888]"}`}>1차<br />{learningStage >= 1 ? climates[nextLevel].primary : "잠김"}</span>
+                <span className={`rounded-md px-1 py-1.5 ${learningStage >= 2 ? "bg-[#f7e9bd]" : "bg-[#eee9dc] text-[#9e9888]"}`}>2차<br />{learningStage >= 2 ? climates[nextLevel].secondary : "60점 해금"}</span>
+                <span className={`rounded-md px-1 py-1.5 ${learningStage >= 3 ? "bg-[#e2edf0]" : "bg-[#eee9dc] text-[#9e9888]"}`}>3차<br />{learningStage >= 3 ? climates[nextLevel].tertiary : "220점 해금"}</span>
+              </div>
+              <p className="mt-5 text-sm font-bold">기후 진화 도감</p>
+              <div className="mt-3 space-y-2">
+                {climates.map((climate, index) => (
+                  <div key={climate.code} className="flex items-center gap-2 text-[11px]">
+                    <span className="grid h-5 w-5 place-items-center rounded-full text-[10px] font-black text-[#17342f]" style={{ backgroundColor: climate.color }}>{climate.code}</span>
+                    <span className="font-semibold">{climate.name}</span>
+                    {index < climates.length - 1 && <span className="ml-auto font-mono text-[#a89a78]">+ +</span>}
+                  </div>
+                ))}
+              </div>
             </div>
             <button
               onClick={() => {
-                setPieces([]);
-                setScore(0);
+                resetGame();
               }}
-              className="mt-8 w-full rounded-xl bg-[#3b241c] py-3 text-sm font-bold text-white"
+              className="mt-6 w-full rounded-xl bg-[#17342f] py-3 text-sm font-bold text-white transition hover:bg-[#285346]"
             >
-              새로 시작
+              {gameOver ? "다시 도전" : "새로 시작"}
             </button>
           </aside>
         </div>
+        {gameOver && (
+          <div className="fixed inset-0 z-50 grid place-items-center bg-[#17342f]/60 p-5 backdrop-blur-sm">
+            <section className="w-full max-w-sm rounded-[28px] border border-white/30 bg-[#fffaf0] p-8 text-center shadow-2xl">
+              <p className="font-mono text-[10px] font-bold tracking-[.2em] text-[#bd4f49]">DANGER LINE CROSSED</p>
+              <h2 className="mt-3 text-3xl font-black tracking-[-.05em]">게임 오버</h2>
+              <p className="mt-3 text-sm leading-relaxed text-[#647565]">기후 조각이 위험선 위에 너무 오래 머물렀어요.<br />같은 코드를 빠르게 합쳐 공간을 만들어 보세요.</p>
+              <p className="mt-6 font-mono text-sm font-bold">FINAL SCORE · {score}</p>
+              <p className="mt-1 text-[11px] text-[#6e806d]">BEST · {highScoreRef.current}</p>
+              <button onClick={resetGame} className="mt-6 w-full rounded-xl bg-[#17342f] py-3 text-sm font-bold text-white transition hover:bg-[#285346]">다시 시작하기</button>
+            </section>
+          </div>
+        )}
       </div>
     </main>
   );
