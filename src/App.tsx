@@ -390,44 +390,48 @@ function Launcher() {
   );
 }
 
-type ClimatePiece = { id: number; level: number; x: number; y: number; angle: number };
-type ClimateBody = Matter.Body & { climateIndex?: number; popped?: boolean };
-const climates = [
-  { code: "Af", primary: "A 열대", secondary: "f 연중 습윤", tertiary: "—", name: "열대우림", icon: "🌴", color: "#e87555", size: 46, example: "싱가포르 · 아마존" },
-  { code: "Am", primary: "A 열대", secondary: "m 몬순", tertiary: "—", name: "열대몬순", icon: "🌦️", color: "#e99a4f", size: 55, example: "뭄바이 · 방글라데시" },
-  { code: "Aw", primary: "A 열대", secondary: "w 겨울 건조", tertiary: "—", name: "열대사바나", icon: "🦒", color: "#dfbd55", size: 65, example: "케냐 · 브라질 고원" },
-  { code: "BWh", primary: "B 건조", secondary: "W 사막", tertiary: "h 고온", name: "고온 사막", icon: "☀️", color: "#dba947", size: 74, example: "사하라 · 아라비아" },
-  { code: "BSh", primary: "B 건조", secondary: "S 스텝", tertiary: "h 고온", name: "고온 스텝", icon: "🏜️", color: "#cfa25b", size: 84, example: "사헬 · 몽골 남부" },
-  { code: "Cfa", primary: "C 온대", secondary: "f 연중 습윤", tertiary: "a 더운 여름", name: "온난 습윤", icon: "🌿", color: "#72ad72", size: 94, example: "한국 남부 · 상하이" },
-  { code: "Cfb", primary: "C 온대", secondary: "f 연중 습윤", tertiary: "b 따뜻한 여름", name: "서안 해양성", icon: "🌱", color: "#529877", size: 104, example: "영국 · 뉴질랜드" },
-  { code: "Dfb", primary: "D 냉대", secondary: "f 연중 습윤", tertiary: "b 따뜻한 여름", name: "냉대 습윤", icon: "🌲", color: "#5e94bf", size: 116, example: "캐나다 · 러시아" },
-  { code: "Dfc", primary: "D 냉대", secondary: "f 연중 습윤", tertiary: "c 서늘한 여름", name: "아한대", icon: "🏔️", color: "#6580b5", size: 128, example: "시베리아 · 알래스카" },
-  { code: "ET", primary: "E 한대", secondary: "T 툰드라", tertiary: "—", name: "툰드라", icon: "❄️", color: "#9ec7d1", size: 140, example: "그린란드 해안" },
-  { code: "EF", primary: "E 한대", secondary: "F 빙설", tertiary: "—", name: "빙설", icon: "🧊", color: "#d6e9ed", size: 154, example: "남극 · 그린란드 내륙" },
+type Primary = "A" | "B" | "C" | "D" | "E";
+type ClimatePiece = { id: number; key: string; parts: Primary[]; x: number; y: number; angle: number };
+type ClimateBody = Matter.Body & { climateKey?: string; climateParts?: Primary[]; popped?: boolean };
+type ClimateNode = { code: string; name: string; icon: string; color: string; size: number; next?: string };
+
+const climateGroups: { id: Primary; title: string; chain: string[]; color: string }[] = [
+  { id: "A", title: "열대", chain: ["Am", "Aw", "As", "Af", "A"], color: "#ed7555" },
+  { id: "B", title: "건조", chain: ["BS", "BW", "B"], color: "#d7a84a" },
+  { id: "C", title: "온대", chain: ["Cfb", "Cfa", "Csb", "Csa", "C"], color: "#5da873" },
+  { id: "D", title: "냉대", chain: ["Df", "Dw", "Ds", "D"], color: "#668fc0" },
+  { id: "E", title: "한대", chain: ["ET", "EF", "E"], color: "#a9d0dc" },
 ];
-
-type StudyStage = 1 | 2 | 3;
-
-function climateStageLabel(climate: (typeof climates)[number], stage: StudyStage) {
-  if (stage === 1) return climate.primary;
-  if (stage === 2) return `${climate.primary} · ${climate.secondary}`;
-  const summerType = climate.tertiary.startsWith("a ") || climate.tertiary.startsWith("b ") ? climate.tertiary : "3차 구분 없음";
-  return `${climate.primary} · ${climate.secondary} · ${summerType}`;
+const climateNodes: Record<string, ClimateNode> = {
+  Am: { code: "Am", name: "열대몬순", icon: "🌦️", color: "#ee8960", size: 104, next: "Aw" }, Aw: { code: "Aw", name: "열대사바나", icon: "🦒", color: "#e7b94e", size: 124, next: "As" }, As: { code: "As", name: "열대 하계건조", icon: "🌞", color: "#e99d55", size: 144, next: "Af" }, Af: { code: "Af", name: "열대우림", icon: "🌴", color: "#61ad71", size: 166, next: "A" }, A: { code: "A", name: "열대기후", icon: "🌴", color: "#df6f4f", size: 194 },
+  BS: { code: "BS", name: "스텝", icon: "🌾", color: "#d6a85d", size: 108, next: "BW" }, BW: { code: "BW", name: "사막", icon: "☀️", color: "#dfb53e", size: 142, next: "B" }, B: { code: "B", name: "건조기후", icon: "🏜️", color: "#c89339", size: 194 },
+  Cfb: { code: "Cfb", name: "서안 해양성", icon: "🌱", color: "#66a879", size: 108, next: "Cfa" }, Cfa: { code: "Cfa", name: "온난 습윤", icon: "🌿", color: "#499861", size: 132, next: "Csb" }, Csb: { code: "Csb", name: "지중해성", icon: "🍋", color: "#72ae6a", size: 154, next: "Csa" }, Csa: { code: "Csa", name: "고온 지중해성", icon: "🌻", color: "#78a954", size: 172, next: "C" }, C: { code: "C", name: "온대기후", icon: "🌳", color: "#4e9e72", size: 194 },
+  Df: { code: "Df", name: "냉대 습윤", icon: "🌲", color: "#789cc7", size: 110, next: "Dw" }, Dw: { code: "Dw", name: "냉대 겨울건조", icon: "🏔️", color: "#5d82b3", size: 140, next: "Ds" }, Ds: { code: "Ds", name: "냉대 하계건조", icon: "🍂", color: "#6c8cb8", size: 166, next: "D" }, D: { code: "D", name: "냉대기후", icon: "🌲", color: "#5b78aa", size: 194 },
+  ET: { code: "ET", name: "툰드라", icon: "❄️", color: "#a9d5dc", size: 112, next: "EF" }, EF: { code: "EF", name: "빙설", icon: "🧊", color: "#d1ebee", size: 148, next: "E" }, E: { code: "E", name: "한대기후", icon: "🧊", color: "#9fc4d6", size: 194 },
+};
+const fusionEntries = [
+  ["AB", "🏜️", "열대사막"], ["AC", "🏝️", "온대정글"], ["AD", "⚡", "빙하화산"], ["AE", "🌋", "초열동토"], ["BC", "🌾", "온대초원"], ["BD", "❄️", "빙황무지"], ["BE", "🧊", "하얀사막"], ["CD", "🍁", "온냉대림"], ["CE", "🏔️", "빙하의봄"], ["DE", "🌌", "극한겨울"],
+  ["ABC", "🏺", "열대오아"], ["ABD", "🌋", "화산황무"], ["ABE", "☄️", "열사빙하"], ["ACD", "🌿", "사계정글"], ["ACE", "🌊", "간헐천섬"], ["ADE", "🧊", "녹는빙하"], ["BCD", "🐎", "유라시아"], ["BCE", "🏜️", "대륙빙하"], ["BDE", "🌬️", "시베리아"], ["CDE", "🌲", "북유럽숲"],
+  ["ABCD", "⛰️", "거대대륙"], ["ABCE", "🗺️", "사막빙도"], ["ABDE", "🌋", "극지화산"], ["ACDE", "❄️", "녹색빙해"], ["BCDE", "🌬️", "북반구대"], ["ABCDE", "🌍", "지구"],
+] as const;
+const fusions = Object.fromEntries(fusionEntries.map(([key, icon, name]) => [key, { icon, name, color: key.length === 5 ? "#4e92c6" : "#886d98" }]));
+function nodeFor(key: string): ClimateNode {
+  const node = climateNodes[key] ?? { code: key, ...fusions[key], size: key === "ABCDE" ? 183 : 207 };
+  return { ...node, size: Math.round(node.size * 0.96) };
 }
 
 function ClimateMerge() {
   const [pieces, setPieces] = useState<ClimatePiece[]>([]);
-  const [nextLevel, setNextLevel] = useState(0);
+  const [activePrimary, setActivePrimary] = useState<Primary>("A");
+  const [nextKey, setNextKey] = useState("Am");
   const [score, setScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
   const [ready, setReady] = useState(true);
   const [previewX, setPreviewX] = useState(320);
-  const [studyStage, setStudyStage] = useState<StudyStage>(1);
   const boardRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<Matter.Engine | null>(null);
   const runnerRef = useRef<Matter.Runner | null>(null);
   const wallsRef = useRef<Matter.Body[]>([]);
-  const nextRef = useRef(0);
   const readyRef = useRef(true);
   const endedRef = useRef(false);
   const scoreRef = useRef(0);
@@ -438,38 +442,62 @@ function ClimateMerge() {
   const dropDelayRef = useRef<number | null>(null);
   const previewPositionRef = useRef(320);
   const previewFrameRef = useRef<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const gameWidth = 640;
   const gameHeight = 800;
-  const basketRim = 104;
-
-  const randomDrop = useCallback((stageScore: number) => {
-    const range = stageScore < 60 ? 3 : stageScore < 220 ? 4 : 5;
-    return Math.floor(Math.random() * range);
+  const basketRim = 92;
+  const basketInset = 18;
+  const basketBottom = 778;
+  const activeGroup = climateGroups.find((group) => group.id === activePrimary)!;
+  const randomDropKey = useCallback((group: (typeof climateGroups)[number]) => {
+    const candidates = group.chain.slice(0, Math.min(3, group.chain.length - 1));
+    return candidates[Math.floor(Math.random() * candidates.length)];
   }, []);
+
+  useEffect(() => {
+    setNextKey(randomDropKey(activeGroup));
+  }, [activePrimary, activeGroup, randomDropKey]);
+
+  const playMergeSound = (kind: "step" | "region" | "earth") => {
+    try {
+      const context = audioContextRef.current ?? new AudioContext();
+      audioContextRef.current = context;
+      const notes = kind === "earth" ? [261.6, 329.6, 392, 523.2, 659.2] : kind === "region" ? [392, 523.2, 659.2] : [440, 554.4];
+      const play = () => notes.forEach((frequency, index) => {
+        const oscillator = context.createOscillator(); const gain = context.createGain(); const start = context.currentTime + index * (kind === "earth" ? 0.1 : 0.055);
+        oscillator.type = kind === "earth" ? "sine" : "triangle"; oscillator.frequency.setValueAtTime(frequency, start);
+        gain.gain.setValueAtTime(kind === "earth" ? 0.07 : 0.045, start); gain.gain.exponentialRampToValueAtTime(0.001, start + (kind === "earth" ? 0.65 : 0.22));
+        oscillator.connect(gain).connect(context.destination); oscillator.start(start); oscillator.stop(start + (kind === "earth" ? 0.7 : 0.25));
+      });
+      if (context.state === "suspended") void context.resume().then(play); else play();
+    } catch { /* audio is optional */ }
+  };
 
   const syncPieces = useCallback((force = false) => {
     const engine = engineRef.current;
     if (!engine) return;
     const now = performance.now();
-    if (!force && now - lastSyncRef.current < 50) return;
+    if (!force && now - lastSyncRef.current < 34) return;
     lastSyncRef.current = now;
     setPieces(
       Matter.Composite.allBodies(engine.world)
-        .filter((body): body is ClimateBody => !body.isStatic && typeof (body as ClimateBody).climateIndex === "number")
-        .map((body) => ({ id: body.id, level: body.climateIndex!, x: body.position.x, y: body.position.y, angle: body.angle }))
+        .filter((body): body is ClimateBody => !body.isStatic && Boolean((body as ClimateBody).climateKey))
+        .map((body) => ({ id: body.id, key: body.climateKey!, parts: body.climateParts ?? [], x: body.position.x, y: body.position.y, angle: body.angle }))
     );
   }, []);
 
-  const makeClimateBody = useCallback((x: number, y: number, level: number) => {
-    const body = Matter.Bodies.circle(x, y, climates[level].size / 2, {
-      friction: 0.16,
-      frictionStatic: 0.52,
-      frictionAir: 0.038,
-      restitution: 0.015,
-      slop: 0.15,
+  const makeClimateBody = useCallback((x: number, y: number, key: string, parts: Primary[] = []) => {
+    const node = nodeFor(key);
+    const body = Matter.Bodies.circle(x, y, node.size / 2, {
+      friction: 0.12,
+      frictionStatic: 0.46,
+      frictionAir: 0.02,
+      restitution: 0.008,
+      slop: 0.02,
       label: "climate-piece",
     }) as ClimateBody;
-    body.climateIndex = level;
+    body.climateKey = key;
+    body.climateParts = parts;
     body.popped = false;
     body.sleepThreshold = 30;
     return body;
@@ -478,16 +506,16 @@ function ClimateMerge() {
   useEffect(() => {
     const engine = Matter.Engine.create({
       enableSleeping: true,
-      gravity: { x: 0, y: 0.92, scale: 0.001 },
-      positionIterations: 6,
-      velocityIterations: 4,
+      gravity: { x: 0, y: 0.78, scale: 0.001 },
+      positionIterations: 8,
+      velocityIterations: 6,
     });
     const runner = Matter.Runner.create({ maxFrameTime: 1000 / 30, maxUpdates: 2 });
     const wallOptions = { isStatic: true, friction: 0.3, restitution: 0.015, label: "wall" };
     const walls = [
-      Matter.Bodies.rectangle(-32, gameHeight / 2, 64, gameHeight, wallOptions),
-      Matter.Bodies.rectangle(gameWidth + 32, gameHeight / 2, 64, gameHeight, wallOptions),
-      Matter.Bodies.rectangle(gameWidth / 2, gameHeight + 18, gameWidth, 64, wallOptions),
+      Matter.Bodies.rectangle(basketInset - 40, (basketRim + basketBottom) / 2, 80, basketBottom - basketRim + 80, wallOptions),
+      Matter.Bodies.rectangle(gameWidth - basketInset + 40, (basketRim + basketBottom) / 2, 80, basketBottom - basketRim + 80, wallOptions),
+      Matter.Bodies.rectangle(gameWidth / 2, basketBottom + 48, gameWidth + 160, 96, wallOptions),
     ];
     engineRef.current = engine;
     runnerRef.current = runner;
@@ -506,22 +534,38 @@ function ClimateMerge() {
 
     const onAfterUpdate = () => {
       const now = performance.now();
-      if (now - lastSafetyCheckRef.current < 80) {
-        syncPieces();
-        return;
-      }
-      lastSafetyCheckRef.current = now;
       const climateBodies = Matter.Composite.allBodies(engine.world).filter(
-        (body): body is ClimateBody => !body.isStatic && typeof (body as ClimateBody).climateIndex === "number"
+        (body): body is ClimateBody => !body.isStatic && Boolean((body as ClimateBody).climateKey)
       );
 
       for (const body of climateBodies) {
         const radius = body.circleRadius ?? 0;
+        // This hard guard runs every physics tick: no piece can tunnel below or through the basket walls.
+        if (body.position.y + radius > basketBottom) {
+          Matter.Body.setPosition(body, { x: body.position.x, y: basketBottom - radius });
+          Matter.Body.setVelocity(body, { x: body.velocity.x * 0.2, y: 0 });
+        }
+        if (body.position.x - radius < basketInset) Matter.Body.setPosition(body, { x: basketInset + radius, y: body.position.y });
+        if (body.position.x + radius > gameWidth - basketInset) Matter.Body.setPosition(body, { x: gameWidth - basketInset - radius, y: body.position.y });
+        if (now - lastSafetyCheckRef.current < 80) continue;
         if (body.position.y - radius > basketRim) enteredBasketRef.current.add(body.id);
         // Newly dropped pieces may pass the rim; only pieces pushed back out of the basket end the game.
         if (enteredBasketRef.current.has(body.id) && body.position.y - radius < basketRim) {
           endGame();
           break;
+        }
+      }
+      if (now - lastSafetyCheckRef.current >= 80) lastSafetyCheckRef.current = now;
+      // Fallback merge sweep: catches equal pieces that came to rest while already overlapping.
+      for (let index = 0; index < climateBodies.length; index += 1) {
+        for (let other = index + 1; other < climateBodies.length; other += 1) {
+          const a = climateBodies[index];
+          const b = climateBodies[other];
+          if (a.climateKey !== b.climateKey || a.popped || b.popped) continue;
+          const distance = Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y);
+          if (distance <= ((a.circleRadius ?? 0) + (b.circleRadius ?? 0)) * 0.98) {
+            onCollision({ pairs: [{ bodyA: a, bodyB: b }] } as unknown as Matter.IEventCollision<Matter.Engine>);
+          }
         }
       }
       syncPieces();
@@ -532,25 +576,38 @@ function ClimateMerge() {
         const a = bodyA as ClimateBody;
         const b = bodyB as ClimateBody;
         if (a.isStatic || b.isStatic) continue;
-        if (a.climateIndex === undefined || b.climateIndex === undefined || a.climateIndex !== b.climateIndex || a.popped || b.popped) continue;
-        if (a.climateIndex >= climates.length - 1) continue;
+        if (!a.climateKey || !b.climateKey || a.popped || b.popped) continue;
+        const aParts = a.climateParts ?? [];
+        const bParts = b.climateParts ?? [];
+        const sharesClimate = aParts.some((part) => bParts.includes(part));
+        const mergedParts = [...new Set([...aParts, ...bParts])].sort() as Primary[];
+        const fusionKey = mergedParts.join("");
+        const nextKey = a.climateKey === b.climateKey
+          ? climateNodes[a.climateKey]?.next
+          : !sharesClimate && aParts.length > 0 && bParts.length > 0 && fusions[fusionKey]
+            ? fusionKey
+            : undefined;
+        const nextParts = a.climateKey === b.climateKey ? (nextKey?.length === 1 ? [nextKey as Primary] : aParts) : mergedParts;
+        if (!nextKey) continue;
         a.popped = true;
         b.popped = true;
-        const level = a.climateIndex + 1;
-        const merged = makeClimateBody((a.position.x + b.position.x) / 2, (a.position.y + b.position.y) / 2, level);
+        const merged = makeClimateBody((a.position.x + b.position.x) / 2, (a.position.y + b.position.y) / 2, nextKey, nextParts);
         Matter.Body.setVelocity(merged, { x: (a.velocity.x + b.velocity.x) * 0.12, y: Math.max(0.05, (a.velocity.y + b.velocity.y) * 0.12) });
         Matter.Body.setAngularVelocity(merged, (a.angularVelocity + b.angularVelocity) * 0.12);
         Matter.Composite.remove(engine.world, [a, b]);
         Matter.Composite.add(engine.world, merged);
-        const earned = (level + 1) * 10;
+        const earned = nextKey === "ABCDE" ? 100000 : fusions[nextKey] ? nextParts.length * 500 : nextKey.length === 1 ? 1000 : 100;
+        playMergeSound(nextKey === "ABCDE" ? "earth" : nextKey.length === 1 || Boolean(fusions[nextKey]) ? "region" : "step");
         scoreRef.current += earned;
         setScore(scoreRef.current);
       }
     };
     Matter.Events.on(engine, "collisionStart", onCollision);
+    Matter.Events.on(engine, "collisionActive", onCollision);
     Matter.Events.on(engine, "afterUpdate", onAfterUpdate);
     return () => {
       Matter.Events.off(engine, "collisionStart", onCollision);
+      Matter.Events.off(engine, "collisionActive", onCollision);
       Matter.Events.off(engine, "afterUpdate", onAfterUpdate);
       if (dropDelayRef.current) window.clearTimeout(dropDelayRef.current);
       if (previewFrameRef.current) window.cancelAnimationFrame(previewFrameRef.current);
@@ -561,9 +618,9 @@ function ClimateMerge() {
 
   const queuePreview = (event: PointerEvent<HTMLDivElement>) => {
     const rect = boardRef.current?.getBoundingClientRect();
-    const radius = climates[nextLevel].size / 2;
+    const radius = climateNodes[nextKey].size / 2;
     if (!rect || !ready) return;
-    previewPositionRef.current = Math.max(radius + 10, Math.min(gameWidth - radius - 10, ((event.clientX - rect.left) / rect.width) * gameWidth));
+    previewPositionRef.current = Math.max(basketInset + radius, Math.min(gameWidth - basketInset - radius, ((event.clientX - rect.left) / rect.width) * gameWidth));
     if (previewFrameRef.current) return;
     previewFrameRef.current = window.requestAnimationFrame(() => {
       previewFrameRef.current = null;
@@ -575,15 +632,12 @@ function ClimateMerge() {
     const rect = boardRef.current?.getBoundingClientRect();
     if (!rect) return;
     if (!readyRef.current || endedRef.current || !engineRef.current) return;
-    const level = nextRef.current;
-    const radius = climates[level].size / 2;
-    const x = Math.max(radius + 10, Math.min(gameWidth - radius - 10, ((event.clientX - rect.left) / rect.width) * gameWidth));
-    Matter.Composite.add(engineRef.current.world, makeClimateBody(x, 42, level));
+    const radius = climateNodes[nextKey].size / 2;
+    const x = Math.max(basketInset + radius, Math.min(gameWidth - basketInset - radius, ((event.clientX - rect.left) / rect.width) * gameWidth));
+    Matter.Composite.add(engineRef.current.world, makeClimateBody(x, 42, nextKey));
+    setNextKey(randomDropKey(activeGroup));
     readyRef.current = false;
     setReady(false);
-    const following = randomDrop(scoreRef.current);
-    nextRef.current = following;
-    setNextLevel(following);
     if (dropDelayRef.current) window.clearTimeout(dropDelayRef.current);
     dropDelayRef.current = window.setTimeout(() => {
       if (!endedRef.current) { readyRef.current = true; setReady(true); }
@@ -601,17 +655,16 @@ function ClimateMerge() {
     scoreRef.current = 0;
     endedRef.current = false;
     readyRef.current = true;
-    nextRef.current = randomDrop(0);
     lastSyncRef.current = 0;
     lastSafetyCheckRef.current = 0;
-    setPieces([]); setScore(0); setGameOver(false); setReady(true); setNextLevel(nextRef.current);
+    setPieces([]); setScore(0); setGameOver(false); setReady(true);
     Matter.Runner.run(runner, engine);
   };
 
   return (
-    <main className="min-h-screen bg-[#f4ead4] px-4 py-5 text-[#17342f] sm:px-8 sm:py-7">
-      <div className="mx-auto max-w-6xl">
-        <header className="flex items-center justify-between gap-4">
+    <main className="h-[100dvh] overflow-hidden bg-[#d8ece5] text-[#17342f]">
+      <div className="relative h-full">
+        <header className="absolute inset-x-4 top-4 z-50 flex items-center justify-between gap-4 sm:inset-x-7 sm:top-6">
           <Link to="/" className="rounded-full border border-[#c6b58e] bg-[#fffaf0] px-4 py-2 text-xs font-bold transition hover:bg-white">
             ← 게임 선택
           </Link>
@@ -620,37 +673,55 @@ function ClimateMerge() {
             <p className="mt-1 text-xl font-black tabular-nums">점수 <span className="text-[#cf6349]">{score}</span></p>
           </div>
         </header>
-        <section className="mt-7 flex flex-wrap items-end justify-between gap-4 border-b border-[#cabf9f] pb-5">
+        <section className="hidden">
           <div>
             <p className="font-mono text-[10px] font-bold tracking-[.18em] text-[#668861]">WORLD CLIMATE ATLAS · 01</p>
             <h1 className="mt-2 text-3xl font-black tracking-[-.055em] sm:text-4xl">쾨펜 기후 합치기</h1>
           </div>
           <p className="max-w-sm text-xs leading-relaxed text-[#637565] sm:text-sm">기후 조각을 합쳐 보세요. 원하는 학습 단계 버튼을 눌러 조각에 표시되는 구분 정보를 바꿀 수 있어요.</p>
         </section>
-        <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
+        <nav aria-label="만들 기후 권역" className="absolute right-3 top-1/2 z-[60] w-[76px] -translate-y-1/2 rounded-[20px] border border-white/60 bg-[#fffaf0]/95 p-1.5 shadow-[0_8px_24px_rgba(31,61,51,.22)] backdrop-blur sm:right-6 sm:w-[88px]">
+          <div className="grid grid-cols-1 gap-1.5">
+            {climateGroups.map((group) => (
+              <button key={group.id} type="button" onClick={() => setActivePrimary(group.id)} aria-pressed={activePrimary === group.id} className={`rounded-[16px] px-2 py-3 text-center transition ${activePrimary === group.id ? "bg-[#17342f] text-white shadow-[0_4px_0_#0e241e]" : "bg-[#f4f0e5] text-[#5d705c] hover:bg-[#e8efdF]"}`}>
+                <span className="block text-lg font-black leading-none">{group.id}</span>
+                <span className={`mt-1 block text-[9px] font-bold ${activePrimary === group.id ? "text-[#dff0d7]" : "text-[#7b8978]"}`}>{group.title}</span>
+              </button>
+            ))}
+          </div>
+          <details className="mt-2 border-t border-[#d8d1bb] pt-2 text-[9px] text-[#526650]">
+            <summary className="cursor-pointer text-center font-bold">합성 도감</summary>
+            <div className="mt-2 max-h-40 space-y-1 overflow-y-auto text-[8px]">
+              {fusionEntries.map(([key, icon, name]) => <p key={key}>{key.split("").join("+")} · {icon} {name}</p>)}
+            </div>
+          </details>
+        </nav>
+        <div className="h-full">
           <section
             ref={boardRef}
             onPointerMove={queuePreview}
             onPointerDown={drop}
-            className="relative h-[59vh] min-h-[420px] touch-none overflow-hidden rounded-[30px] bg-[radial-gradient(circle_at_20%_10%,rgba(255,255,255,.64),transparent_24%),linear-gradient(162deg,#b7deeb_0%,#d8ece5_46%,#d9e8b5_47%,#bdd89a_100%)] shadow-[inset_0_0_0_4px_rgba(255,255,255,.48),0_13px_0_#24463c] sm:h-[67vh] sm:min-h-[520px]"
+            className="relative mx-auto aspect-[4/5] h-[100dvh] w-auto max-w-full touch-none overflow-hidden rounded-none bg-[radial-gradient(circle_at_20%_10%,rgba(255,255,255,.64),transparent_24%),linear-gradient(162deg,#b7deeb_0%,#d8ece5_46%,#d9e8b5_47%,#bdd89a_100%)] shadow-[inset_0_0_0_4px_rgba(255,255,255,.48),0_13px_0_#24463c]"
           >
             <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-[linear-gradient(180deg,rgba(255,255,255,.4),transparent)]" />
-            <div className="pointer-events-none absolute inset-x-[3%] bottom-[3%] top-[13%] z-10 overflow-hidden rounded-b-[34px] border-x-[11px] border-b-[11px] border-[#e5b865]/85 bg-[linear-gradient(110deg,rgba(255,255,255,.32),rgba(255,242,186,.14)_35%,rgba(255,255,255,.06)_62%,rgba(181,126,57,.12))] shadow-[inset_12px_0_18px_rgba(255,255,255,.36),inset_-11px_0_18px_rgba(129,83,31,.2),inset_0_-8px_12px_rgba(132,81,28,.2),0_5px_0_rgba(111,74,36,.18)]">
+            <div className="pointer-events-none absolute inset-x-[3%] bottom-[3%] top-[11.5%] z-10 overflow-hidden rounded-b-[34px] border-x-[11px] border-b-[11px] border-[#e5b865]/85 bg-[linear-gradient(110deg,rgba(255,255,255,.32),rgba(255,242,186,.14)_35%,rgba(255,255,255,.06)_62%,rgba(181,126,57,.12))] shadow-[inset_12px_0_18px_rgba(255,255,255,.36),inset_-11px_0_18px_rgba(129,83,31,.2),inset_0_-8px_12px_rgba(132,81,28,.2),0_5px_0_rgba(111,74,36,.18)]">
               <span className="absolute inset-x-5 bottom-2 h-10 rounded-full border-t border-white/50 bg-white/10 blur-[1px]" />
               <span className="absolute -left-8 top-12 h-[72%] w-10 -skew-x-12 rounded-full bg-white/35 blur-sm" />
               <span className="absolute right-4 top-16 h-1/2 w-3 rounded-full bg-[#9f682a]/15 blur-sm" />
             </div>
-            <div className="pointer-events-none absolute inset-x-[2.4%] top-[12.6%] z-30 h-5 rounded-full border border-[#fff5c9] bg-[linear-gradient(180deg,#fff5ce_0%,#efc573_48%,#c88d40_100%)] shadow-[inset_0_3px_2px_rgba(255,255,255,.75),0_4px_0_rgba(121,77,31,.22),0_10px_12px_rgba(123,80,31,.16)]" />
-            <div className="pointer-events-none absolute inset-x-[5%] top-[13.5%] z-30 h-1 rounded-full bg-white/75" />
+            <div className="pointer-events-none absolute inset-x-[2.4%] top-[11.1%] z-30 h-5 rounded-full border border-[#fff5c9] bg-[linear-gradient(180deg,#fff5ce_0%,#efc573_48%,#c88d40_100%)] shadow-[inset_0_3px_2px_rgba(255,255,255,.75),0_4px_0_rgba(121,77,31,.22),0_10px_12px_rgba(123,80,31,.16)]" />
+            <div className="pointer-events-none absolute inset-x-[5%] top-[12%] z-30 h-1 rounded-full bg-white/75" />
             <p className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2 whitespace-nowrap rounded-full border border-white/70 bg-[#fffdf5]/85 px-4 py-2 text-xs font-bold text-[#315c4f] shadow-sm">
               {ready ? "위치를 고르고 눌러 조각을 떨어뜨리세요" : "조각이 착지하는 중…"}
             </p>
-            <p className="pointer-events-none absolute left-6 top-[13%] z-40 -translate-y-1/2 rounded-full bg-[#8d5626]/80 px-2 py-0.5 font-mono text-[8px] font-bold tracking-[.16em] text-white/90">BASKET RIM</p>
+            <p className="pointer-events-none absolute left-1/2 top-[74px] z-10 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium tracking-wide text-[#315c4f]/45">
+              여기에는 없는 기후도 있기에 전부다 믿지는 마세요
+            </p>
+            <p className="pointer-events-none absolute left-6 top-[11.5%] z-40 -translate-y-1/2 rounded-full bg-[#8d5626]/80 px-2 py-0.5 font-mono text-[8px] font-bold tracking-[.16em] text-white/90">BASKET RIM</p>
             <p className="pointer-events-none absolute bottom-[5%] left-7 z-20 font-mono text-[9px] tracking-[.22em] text-[#315c4f]/60">MERGE BASKET · CLIMATE BELTS</p>
-            {ready && !gameOver && <div className="pointer-events-none absolute top-[42px] z-40 -translate-x-1/2" style={{ left: `${(previewX / gameWidth) * 100}%` }}><div className="h-10 border-l-2 border-dashed border-[#315c4f]/55" /><div className="relative grid h-10 w-10 -translate-x-[19px] place-items-center overflow-hidden rounded-full border-2 border-white/90 text-[10px] font-black text-[#17342f] shadow-[0_4px_0_rgba(35,78,64,.2)]" style={{ backgroundColor: climates[nextLevel].color }}><span className="absolute left-2 top-1 h-2.5 w-4 rotate-[-28deg] rounded-full bg-white/70" />{climates[nextLevel].code}</div></div>}
+            {ready && !gameOver && <div className="pointer-events-none absolute top-[38px] z-40 -translate-x-1/2" style={{ left: `${(previewX / gameWidth) * 100}%` }}><div className="h-10 border-l-2 border-dashed border-[#315c4f]/55" /><div className="relative grid h-12 w-12 -translate-x-[23px] place-items-center overflow-hidden rounded-full border-2 border-white/90 text-xs font-black text-[#17342f] shadow-[0_4px_0_rgba(35,78,64,.2)]" style={{ backgroundColor: nodeFor(nextKey).color }}><span className="absolute left-2 top-1 h-3 w-5 rotate-[-28deg] rounded-full bg-white/70" />{nodeFor(nextKey).code}</div></div>}
             {pieces.map((piece) => {
-              const climate = climates[piece.level];
-              const stageLabel = climateStageLabel(climate, studyStage);
+              const climate = nodeFor(piece.key);
               return (
                 <div
                   key={piece.id}
@@ -658,8 +729,7 @@ function ClimateMerge() {
                   style={{
                     left: `${(piece.x / gameWidth) * 100}%`,
                     top: `${(piece.y / gameHeight) * 100}%`,
-                    width: `${(climate.size / gameWidth) * 100}%`,
-                    height: `${(climate.size / gameWidth) * 100}%`,
+                    width: `${(climate.size / gameWidth) * 100}%`, aspectRatio: "1 / 1",
                     backgroundColor: climate.color,
                     fontSize: `${climate.size * 0.48}px`,
                     transform: `translate(-50%, -50%) rotate(${piece.angle}rad)`,
@@ -670,58 +740,28 @@ function ClimateMerge() {
                   <span className="absolute bottom-[11%] right-[13%] h-[13%] w-[13%] rounded-full bg-white/30" />
                   <span className="relative font-black tracking-[-.1em] text-[#17342f] drop-shadow-[0_1px_0_rgba(255,255,255,.45)]" style={{ fontSize: `${Math.max(10, climate.size * 0.27)}px` }}>{climate.code}</span>
                   <span className="absolute bottom-[15%] text-[.55em] opacity-70">{climate.icon}</span>
-                  <span className="absolute -bottom-5 whitespace-nowrap rounded-full border border-white/70 bg-[#fffdf5]/92 px-2 py-0.5 text-[9px] font-bold text-[#274b42]">{stageLabel}</span>
+                  <span className="absolute -bottom-5 whitespace-nowrap rounded-full border border-white/70 bg-[#fffdf5]/92 px-2 py-0.5 text-[9px] font-bold text-[#274b42]">{climate.name}</span>
                 </div>
               );
             })}
           </section>
-          <aside className="rounded-[24px] border border-[#d9cca8] bg-[#fffaf0] p-5 shadow-[0_10px_24px_rgba(76,91,54,.08)] sm:p-6">
+          <aside className="hidden">
             <p className="font-mono text-[10px] font-bold tracking-[.16em] text-[#668861]">NEXT CLIMATE</p>
-            <div
-              className="mx-auto mt-5 grid h-28 w-28 place-items-center rounded-full border-4 border-white shadow-[0_7px_0_rgba(28,72,62,.16),0_12px_18px_rgba(28,72,62,.12)]"
-              style={{ backgroundColor: climates[nextLevel].color, fontSize: 48 }}
-            >
-              {climates[nextLevel].icon}
-            </div>
-            <p className="mt-3 text-center font-black">{climates[nextLevel].code} · {climates[nextLevel].name}</p>
-            <p className="mt-1 text-center text-[11px] text-[#6e806d]">{climates[nextLevel].example}</p>
+            <div className="mx-auto mt-5 grid h-28 w-28 place-items-center rounded-full border-4 border-white text-4xl shadow-[0_7px_0_rgba(28,72,62,.16),0_12px_18px_rgba(28,72,62,.12)]" style={{ backgroundColor: nodeFor(nextKey).color }}>{nodeFor(nextKey).icon}</div>
+            <p className="mt-3 text-center font-black">{nodeFor(nextKey).code} · {nodeFor(nextKey).name}</p>
+            <p className="mt-1 text-center text-[11px] text-[#6e806d]">같은 조각 2개를 합쳐 다음 단계로 진화</p>
             <div className="mt-6 border-t border-[#e2d7ba] pt-5">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-bold">기후 구분 단계</p>
-                <span className="rounded-full bg-[#eaf1e3] px-2 py-1 font-mono text-[9px] font-bold text-[#51734f]">LEVEL {studyStage}</span>
-              </div>
-              <div className="mt-3 grid grid-cols-3 gap-1.5">
-                {([
-                  { stage: 1 as StudyStage, title: "1단계", detail: "1차 구분" },
-                  { stage: 2 as StudyStage, title: "2단계", detail: "1차 + 2차" },
-                  { stage: 3 as StudyStage, title: "3단계", detail: "1·2차 + a,b" },
-                ]).map(({ stage, title, detail }) => (
-                  <button
-                    key={stage}
-                    type="button"
-                    onClick={() => setStudyStage(stage)}
-                    aria-pressed={studyStage === stage}
-                    className={`rounded-xl border px-1 py-2 text-center text-[9px] font-bold transition ${studyStage === stage ? "border-[#315c4f] bg-[#315c4f] text-white shadow-[0_3px_0_#24463c]" : "border-[#ded2b1] bg-[#fffdf5] text-[#687866] hover:border-[#9dae92]"}`}
-                  >
-                    <span className="block text-[10px]">{title}</span>
-                    <span className={`mt-0.5 block text-[8px] font-medium ${studyStage === stage ? "text-[#dcf0d2]" : "text-[#8b9786]"}`}>{detail}</span>
-                  </button>
-                ))}
+                <p className="text-sm font-bold">만들 기후 권역</p>
+                <span className="rounded-full bg-[#eaf1e3] px-2 py-1 font-mono text-[9px] font-bold text-[#51734f]">{activePrimary} ROUTE</span>
               </div>
               <div className="mt-3 rounded-xl bg-[#f1f5e9] px-3 py-2 text-[10px] leading-relaxed text-[#5f725c]">
-                {studyStage === 1 && "1차 구분: A 열대 · B 건조 · C 온대 · D 냉대 · E 한대"}
-                {studyStage === 2 && "2차 구분까지: 강수 특성(f·w·S·W·T·F)을 함께 표시합니다."}
-                {studyStage === 3 && "3차 구분은 여름 기온의 a·b 유형만 추가해 간결하게 학습합니다."}
+                <b>{activeGroup.title}</b> · {activeGroup.chain.join(" → ")} 순서로 합쳐 {activePrimary}를 만드세요. 만든 A–E는 서로 합쳐 새로운 지형이 됩니다.
               </div>
-              <p className="mt-5 text-sm font-bold">기후 진화 도감</p>
-              <div className="mt-3 space-y-2">
-                {climates.map((climate, index) => (
-                  <div key={climate.code} className="flex items-center gap-2 text-[11px]">
-                    <span className="grid h-5 w-5 place-items-center rounded-full text-[10px] font-black text-[#17342f]" style={{ backgroundColor: climate.color }}>{climate.code}</span>
-                    <span className="font-semibold">{climate.name}</span>
-                    {index < climates.length - 1 && <span className="ml-auto font-mono text-[#a89a78]">+ +</span>}
-                  </div>
-                ))}
+              <div className="mt-5 rounded-2xl border border-[#dce6d7] bg-[#f7faef] p-3 text-center">
+                <p className="text-xl">🌍</p>
+                <p className="mt-1 text-xs font-bold">A + B + C + D + E</p>
+                <p className="mt-1 text-[10px] text-[#657764]">지구 완성 보너스 · 100,000점</p>
               </div>
             </div>
             <button
@@ -737,9 +777,9 @@ function ClimateMerge() {
         {gameOver && (
           <div className="fixed inset-0 z-50 grid place-items-center bg-[#17342f]/60 p-5 backdrop-blur-sm">
             <section className="w-full max-w-sm rounded-[28px] border border-white/30 bg-[#fffaf0] p-8 text-center shadow-2xl">
-              <p className="font-mono text-[10px] font-bold tracking-[.2em] text-[#bd4f49]">DANGER LINE CROSSED</p>
+              <p className="font-mono text-[10px] font-bold tracking-[.2em] text-[#bd4f49]">BASKET OVERFLOW</p>
               <h2 className="mt-3 text-3xl font-black tracking-[-.05em]">게임 오버</h2>
-              <p className="mt-3 text-sm leading-relaxed text-[#647565]">기후 조각이 위험선 위에 너무 오래 머물렀어요.<br />같은 코드를 빠르게 합쳐 공간을 만들어 보세요.</p>
+              <p className="mt-3 text-sm leading-relaxed text-[#647565]">기후 조각이 3D 바구니 상단을 넘었어요.<br />같은 조각을 합쳐 공간을 만들어 보세요.</p>
               <p className="mt-6 font-mono text-sm font-bold">FINAL SCORE · {score}</p>
               <p className="mt-1 text-[11px] text-[#6e806d]">BEST · {highScoreRef.current}</p>
               <button onClick={resetGame} className="mt-6 w-full rounded-xl bg-[#17342f] py-3 text-sm font-bold text-white transition hover:bg-[#285346]">다시 시작하기</button>
