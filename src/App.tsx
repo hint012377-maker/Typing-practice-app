@@ -1,6 +1,7 @@
 import { ChangeEvent, memo, PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserRouter, Link, RouterProvider } from "react-router-dom";
 import Matter from "matter-js";
+import RhythmGame from "./RhythmGame";
 
 type Country = { code: string; korean: string; english: string; lat: number; lng: number; zoom: number };
 
@@ -403,7 +404,7 @@ function Launcher() {
             나라 이름을 손끝으로 익히고, 작은 기후 요소를 합쳐 거대한 날씨 현상을 만들어 보세요.
           </p>
         </section>
-        <section className="mt-10 grid gap-5 lg:grid-cols-[1.2fr_.8fr]">
+        <section className="mt-10 grid gap-5 lg:grid-cols-3">
           <Link
             to="/typing"
             className="group relative min-h-[260px] overflow-hidden rounded-[28px] bg-[#dff3e3] p-7 text-[#17342f] transition hover:-translate-y-1 sm:min-h-[310px]"
@@ -431,6 +432,12 @@ function Launcher() {
             <span className="absolute bottom-7 right-7 grid h-12 w-12 place-items-center rounded-full bg-[#442116] text-xl text-white transition group-hover:translate-x-1">
               ↓
             </span>
+          </Link>
+          <Link to="/rhythm" className="rhythm-launch group relative min-h-[260px] overflow-hidden rounded-[28px] p-7 transition hover:-translate-y-1 sm:min-h-[310px]">
+            <p className="relative font-mono text-xs font-bold tracking-widest">03 · COUNTRY RHYTHM</p>
+            <h2 className="relative mt-8 text-3xl font-bold tracking-[-.05em] sm:mt-10 sm:text-4xl">나라 리듬게임</h2>
+            <p className="relative mt-3 max-w-xs text-xs sm:text-sm">비트를 따라 세계 여행. 롱노트와 함께 손끝으로 연주해요.</p>
+            <span className="absolute bottom-7 right-7 text-3xl">♫ →</span>
           </Link>
         </section>
       </div>
@@ -980,6 +987,7 @@ const router = createBrowserRouter([
   { path: "/", element: <Launcher /> },
   { path: "/typing", element: <CountryTyping /> },
   { path: "/climate", element: <ClimateMerge /> },
+  { path: "/rhythm", element: <RhythmGame countries={lesson} /> },
   { path: "*", element: <Launcher /> },
 ]);
 
