@@ -1,4 +1,5 @@
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&display=swap");
 @import "tailwindcss";
 
 @theme {
@@ -13,6 +14,106 @@ html {
 body {
   margin: 0;
 }
+
+.rhythm-room { --rhythm-bg: #0c201b; --rhythm-panel: #142b24; --rhythm-line: #2c4438; --rhythm-ink: #eef4dc; --rhythm-muted: #a2b7a8; --rhythm-accent: #dcf86e; min-height: 100dvh; padding: 24px clamp(16px, 4vw, 64px); background: radial-gradient(ellipse at 40% 0%, #234532 0, transparent 60%), var(--rhythm-bg); color: var(--rhythm-ink); }
+.rhythm-room button, .rhythm-room a { transition: background .18s, border-color .18s, transform .18s; }
+.rhythm-room button { cursor: pointer; }
+.rhythm-room button:disabled { cursor: default; opacity: .3; }
+.rhythm-key-settings h2 { display: flex; align-items: center; }
+.rhythm-song-upload { position: relative; display: block; margin-top: 14px; padding: 13px; border: 1px dashed var(--rhythm-accent); border-radius: 9px; color: var(--rhythm-accent); background: #dcf86e0a; text-align: center; font-size: 11px; cursor: pointer; }
+.rhythm-song-upload input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+.rhythm-song-upload:focus-within { outline: 2px solid var(--rhythm-accent); outline-offset: 3px; }
+.rhythm-song-name { margin-top: 10px; color: var(--rhythm-ink); font-size: 10px; overflow-wrap: anywhere; line-height: 1.7; }
+.rhythm-builtin-tracks { display: grid; gap: 8px; margin-top: 14px; }
+.rhythm-builtin-tracks button { display: flex; align-items: center; gap: 9px; padding: 12px 9px; text-align: left; background: #0d211a; border: 1px solid var(--rhythm-line); border-radius: 9px; }
+.rhythm-builtin-tracks button:hover:not(:disabled), .rhythm-builtin-tracks button[aria-pressed="true"] { background: #dcf86e12; border-color: var(--rhythm-accent); }
+.rhythm-track-icon { color: var(--rhythm-accent); font-size: 19px; }
+.rhythm-builtin-tracks strong { display: block; font-size: 11px; color: var(--rhythm-ink); }
+.rhythm-builtin-tracks small { display: block; margin-top: 4px; font-size: 8px; line-height: 1.5; color: var(--rhythm-muted); }
+.rhythm-track-meta { margin-left: auto; flex-shrink: 0; color: var(--rhythm-accent); text-align: right; font: 8px var(--font-mono); }
+.rhythm-song-caption { margin-top: 10px; font-size: 8px; line-height: 1.8; color: var(--rhythm-muted); }
+.rhythm-song-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.rhythm-song-fields label { font-size: 9px; color: var(--rhythm-muted); }
+.rhythm-song-fields input { display: block; width: 100%; margin-top: 6px; padding: 9px; background: #0d211a; color: var(--rhythm-ink); border: 1px solid var(--rhythm-line); border-radius: 6px; font: 12px var(--font-mono); }
+.rhythm-song-fields input:disabled { opacity: .4; }
+.rhythm-song-clear { margin-top: 12px; font-size: 9px; color: var(--rhythm-accent); text-decoration: underline; }
+.rhythm-song-error { margin-top: 10px; font-size: 10px; line-height: 1.7; color: #ffb68f; }
+@media (max-width: 640px) { .rhythm-song-settings { grid-column: 1 / -1; } }
+.rhythm-key-reset { margin-left: auto; padding: 5px; font: 9px var(--font-sans); color: var(--rhythm-muted); text-decoration: underline; }
+.rhythm-key-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 14px; }
+.rhythm-key-buttons button { display: grid; gap: 6px; min-height: 58px; padding: 8px 2px; border: 1px solid var(--rhythm-line); border-radius: 8px; background: #0d211a; }
+.rhythm-key-buttons small { font-size: 8px; color: var(--rhythm-muted); }
+.rhythm-key-buttons strong { font: 600 19px "Outfit", sans-serif; color: var(--rhythm-accent); }
+.rhythm-key-buttons button:hover, .rhythm-key-buttons button.is-listening { border-color: var(--rhythm-accent); background: #dcf86e18; }
+.rhythm-key-hint { margin-top: 10px; font-size: 9px; color: var(--rhythm-muted); line-height: 1.8; }
+.rhythm-timing-hint { margin-top: 12px; font-size: 9px; line-height: 1.8; color: var(--rhythm-accent); }
+@media (max-width: 640px) { .rhythm-key-settings { grid-column: 1 / -1; }.rhythm-key-buttons button { min-height: 48px; }.rhythm-timing-hint br { display: none; } }
+.rhythm-room button:focus-visible, .rhythm-room a:focus-visible, .rhythm-room input:focus-visible { outline: 2px solid var(--rhythm-accent); outline-offset: 4px; }
+.rhythm-header { max-width: 1440px; margin: auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 22px; border-bottom: 1px solid var(--rhythm-line); font-size: 11px; }
+.rhythm-header a, .rhythm-header button { border: 1px solid var(--rhythm-line); border-radius: 30px; padding: 10px 15px; }
+.rhythm-header a:hover, .rhythm-header button:hover { background: #ffffff10; }
+.rhythm-header > span { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; }
+.rhythm-header i { margin: 0 12px; color: var(--rhythm-accent); font-style: normal; }
+.rhythm-layout { display: grid; grid-template-columns: minmax(190px, 1fr) minmax(320px, 560px) minmax(170px, .8fr); gap: clamp(22px, 3.2vw, 52px); max-width: 1340px; margin: 36px auto 0; align-items: start; }
+.rhythm-eyebrow { font: 10px var(--font-mono); letter-spacing: .12em; color: var(--rhythm-accent); }
+.rhythm-settings { padding-top: 18px; }
+.rhythm-settings h1 { margin-top: 20px; font-size: clamp(34px, 3.6vw, 56px); font-weight: 700; line-height: 1.17; letter-spacing: -.065em; }
+.rhythm-description { margin-top: 18px; font-size: 12px; line-height: 1.9; color: var(--rhythm-muted); }
+.rhythm-setting { border-top: 1px solid var(--rhythm-line); margin-top: 32px; padding-top: 20px; }
+.rhythm-setting h2 { font-family: var(--font-mono); font-size: 10px; color: var(--rhythm-accent); }
+.rhythm-setting h2 span { margin-left: 12px; font: 600 12px var(--font-sans); color: var(--rhythm-ink); }
+.rhythm-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 16px; padding: 4px; background: #071910; border: 1px solid var(--rhythm-line); border-radius: 10px; }
+.rhythm-toggle button { font-size: 10px; padding: 11px 2px; border-radius: 6px; color: var(--rhythm-muted); }
+.rhythm-toggle button[aria-pressed="true"] { background: var(--rhythm-accent); color: #193226; font-weight: 700; }
+.rhythm-speed { display: flex; align-items: center; justify-content: space-between; margin: 18px 0; }
+.rhythm-speed button { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--rhythm-line); font-size: 22px; }
+.rhythm-speed button:not(:disabled):hover { background: var(--rhythm-accent); color: var(--rhythm-bg); }
+.rhythm-speed strong { font: 500 42px "Outfit", sans-serif; letter-spacing: -.05em; }
+.rhythm-speed small { font-size: 20px; color: var(--rhythm-muted); margin-left: 4px; }
+.rhythm-setting input { width: 100%; accent-color: var(--rhythm-accent); cursor: pointer; }
+.rhythm-range-label { display: flex; justify-content: space-between; font: 8px var(--font-mono); color: var(--rhythm-muted); margin-top: 7px; }
+.rhythm-live-note { margin-top: 26px; font-size: 9px; line-height: 1.8; color: var(--rhythm-muted); }
+.rhythm-live-note span { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--rhythm-accent); margin-right: 5px; }
+.rhythm-machine { border: 1px solid #4b624c; border-radius: 16px; padding: 10px; background: #192d23; box-shadow: 0 24px 60px #0004, inset 0 1px #ffffff10; overflow: hidden; }
+.rhythm-machine-top { display: flex; justify-content: space-between; gap: 8px; padding: 7px 5px 15px; font: 8px var(--font-mono); letter-spacing: .1em; color: var(--rhythm-muted); }
+.rhythm-machine-top i { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--rhythm-accent); margin-right: 6px; box-shadow: 0 0 8px var(--rhythm-accent); }
+.rhythm-track { position: relative; border: 1px solid #395343; border-radius: 7px; overflow: hidden; background: #0d231f; }
+.rhythm-track canvas { display: block; width: 100%; height: clamp(380px, 62dvh, 660px); }
+.rhythm-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; background: #0a1c18cc; backdrop-filter: blur(5px); }
+.rhythm-overlay > p { font: 9px var(--font-mono); letter-spacing: .14em; color: var(--rhythm-accent); }
+.rhythm-overlay h2 { font-size: clamp(24px, 2vw, 32px); font-weight: 700; letter-spacing: -.05em; margin: 15px 0; }
+.rhythm-overlay > span { color: var(--rhythm-muted); font-size: 11px; line-height: 1.9; }
+.rhythm-overlay button { margin: 28px 0 16px; background: var(--rhythm-accent); color: #172b20; padding: 15px 30px; border-radius: 8px; font-weight: 700; font-size: 13px; box-shadow: 0 0 40px #dcf86e20; }
+.rhythm-overlay button:hover { transform: translateY(-2px); background: #e9ff93; }
+.rhythm-overlay small { font: 9px var(--font-mono); color: var(--rhythm-muted); }
+.rhythm-pads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+.rhythm-lane-0 { --lane-color: #dcf86e; }.rhythm-lane-1 { --lane-color: #60ebd4; }.rhythm-lane-2 { --lane-color: #ffb68f; }.rhythm-lane-3 { --lane-color: #baacff; }
+.rhythm-pad { display: grid; place-items: center; gap: 3px; padding: 10px 2px; background: #0e241c; color: var(--lane-color); border: 1px solid color-mix(in srgb, var(--lane-color) 40%, transparent); border-bottom-width: 4px; border-radius: 7px; touch-action: none; user-select: none; }
+.rhythm-pad span { font: 600 22px "Outfit", sans-serif; }.rhythm-pad small { font: 7px var(--font-mono); letter-spacing: .05em; }
+.rhythm-pad.is-pressed { background: var(--lane-color); color: #10291d; border-bottom-width: 1px; transform: translateY(3px); box-shadow: 0 0 24px color-mix(in srgb, var(--lane-color) 40%, transparent); }
+.rhythm-transport { display: flex; align-items: center; justify-content: space-between; font: 9px var(--font-mono); padding: 14px 2px 9px; }
+.rhythm-transport i { font-style: normal; color: var(--rhythm-muted); margin-left: 6px; }
+.rhythm-transport button { font: 10px var(--font-sans); padding: 4px 6px; }
+.rhythm-progress { height: 3px; background: #ffffff0c; border-radius: 2px; }.rhythm-progress span { display: block; height: 100%; background: var(--rhythm-accent); transition: width .1s linear; }
+.rhythm-results { padding-top: 20px; }
+.rhythm-score > strong { display: block; font: 500 clamp(30px, 3.2vw, 48px) "Outfit", sans-serif; letter-spacing: -.035em; margin-top: 10px; font-variant-numeric: tabular-nums; }
+.rhythm-score > div { display: flex; flex-direction: column; gap: 10px; color: var(--rhythm-muted); font-size: 10px; margin-top: 16px; }
+.rhythm-score b { color: var(--rhythm-ink); margin-left: 10px; font-family: var(--font-mono); }
+.rhythm-combo { margin-top: 32px; padding: 26px 0; border-top: 1px solid var(--rhythm-line); border-bottom: 1px solid var(--rhythm-line); }
+.rhythm-combo > span { font: 9px var(--font-mono); color: var(--rhythm-muted); letter-spacing: .13em; }
+.rhythm-combo strong { display: block; font: 600 84px/.95 "Outfit", sans-serif; letter-spacing: -.06em; color: var(--rhythm-accent); margin: 15px 0; font-variant-numeric: tabular-nums; }
+.rhythm-combo p { font-size: 10px; color: var(--rhythm-muted); }
+.rhythm-judgments { display: grid; gap: 14px; margin-top: 26px; font: 10px var(--font-mono); }.rhythm-judgments p { display: flex; justify-content: space-between; }.rhythm-judgments p:nth-child(1) { color: var(--rhythm-accent); }.rhythm-judgments p:nth-child(2) { color: #60ebd4; }.rhythm-judgments p:nth-child(3) { color: #ffb68f; }
+.rhythm-how { margin-top: 30px; padding-top: 22px; border-top: 1px solid var(--rhythm-line); }.rhythm-how h2 { font-size: 12px; font-weight: 600; margin-bottom: 16px; }.rhythm-how p { font-size: 10px; color: var(--rhythm-muted); line-height: 2.4; }.rhythm-how b { color: var(--rhythm-ink); margin-right: 6px; }.rhythm-how > span { display: block; margin-top: 16px; color: var(--rhythm-muted); font-size: 9px; line-height: 1.8; }
+.rhythm-footer { max-width: 1340px; margin: 30px auto 0; padding-top: 18px; border-top: 1px solid var(--rhythm-line); display: flex; justify-content: space-between; color: var(--rhythm-muted); font-size: 9px; }.rhythm-footer span:first-child { font-family: var(--font-mono); letter-spacing: .08em; }
+.rhythm-launch { background: #233d30; color: #dcf86e; border: 1px solid #719054; }.rhythm-launch > p:nth-of-type(2) { color: #bfd5c3; }.rhythm-launch::before { content: ""; position: absolute; right: -35px; bottom: -70px; width: 190px; height: 280px; transform: rotate(25deg); background: repeating-linear-gradient(0deg, #dcf86e20 0 12px, transparent 12px 42px); }
+@media (max-width: 1000px) {
+  .rhythm-room { padding: 18px; }.rhythm-layout { grid-template-columns: minmax(160px, .7fr) minmax(300px, 1.6fr); gap: 24px; margin-top: 24px; }.rhythm-results { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; padding-top: 0; }.rhythm-combo { margin: 0; padding: 0 20px; border: 0; border-left: 1px solid var(--rhythm-line); }.rhythm-combo strong { font-size: 54px; }.rhythm-judgments { margin: 0; align-self: center; }.rhythm-how { grid-column: 1 / -1; margin: 0; display: flex; flex-wrap: wrap; gap: 8px 20px; }.rhythm-how h2 { margin: 0; }.rhythm-how > span { margin: 0; }
+}
+@media (max-width: 640px) {
+  .rhythm-room { padding: 12px; }.rhythm-header { padding-bottom: 12px; }.rhythm-header > span { font-size: 8px; letter-spacing: 0; }.rhythm-header i { margin: 0 4px; }.rhythm-header a, .rhythm-header button { padding: 8px 10px; font-size: 10px; }.rhythm-layout { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }.rhythm-settings { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; padding: 0; }.rhythm-settings > .rhythm-eyebrow { grid-column: 1 / -1; font-size: 8px; }.rhythm-settings h1 { grid-column: 1 / -1; font-size: 28px; margin: 0; }.rhythm-settings h1 br { display: none; }.rhythm-description { display: none; }.rhythm-setting { margin-top: 8px; padding-top: 12px; }.rhythm-setting h2 { font-size: 8px; }.rhythm-setting h2 span { font-size: 10px; }.rhythm-toggle { margin-top: 10px; }.rhythm-toggle button { font-size: 9px; min-height: 44px; }.rhythm-speed { margin: 8px 0; }.rhythm-speed strong { font-size: 30px; }.rhythm-speed button { width: 32px; height: 32px; }.rhythm-range-label { font-size: 7px; }.rhythm-live-note { grid-column: 1 / -1; margin: 0; font-size: 8px; }.rhythm-machine { width: 100%; padding: 8px; }.rhythm-track canvas { height: clamp(350px, 53dvh, 520px); }.rhythm-results { width: 100%; display: grid; gap: 12px; grid-template-columns: 1.2fr .8fr 1fr; }.rhythm-score > strong { font-size: 29px; }.rhythm-score > div { font-size: 9px; gap: 5px; margin-top: 8px; }.rhythm-combo { padding: 0 8px; }.rhythm-combo > span { font-size: 7px; letter-spacing: 0; }.rhythm-combo strong { font-size: 48px; margin: 8px 0; }.rhythm-combo p { font-size: 8px; }.rhythm-judgments { font-size: 8px; gap: 12px; }.rhythm-footer { gap: 14px; font-size: 8px; line-height: 1.6; }
+}
+@media (prefers-reduced-motion: reduce) { .rhythm-room button, .rhythm-room a, .rhythm-progress span { transition: none; } }
 
 .typing-room { --typing-bg: #eef3e8; --typing-surface: #fffef6; --typing-ink: #193c30; --typing-muted: #617465; --typing-line: #ccdbc8; --typing-accent: #32774d; --typing-glow: #d3eeb6; background: var(--typing-bg); color: var(--typing-ink); }
 .typing-room[data-theme="dark"] { color-scheme: dark; --typing-bg: #0d251f; --typing-surface: #18372e; --typing-ink: #edf3df; --typing-muted: #b1c5b5; --typing-line: #34574a; --typing-accent: #dcf25c; --typing-glow: #365639; }
