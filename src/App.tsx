@@ -60,9 +60,25 @@ const lesson: Country[] = [
   { code: "PHL", korean: "필리핀", english: "Philippines", lat: 12.88, lng: 121.77, zoom: 5 },
 ];
 
-const mapUrl = (country: Country, isFixed: boolean) => {
+function storedSetting(key: string, fallback: string) {
+  try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
+}
+
+function evaluateTyping(previous: string, value: string, target: string) {
+  let prefix = 0;
+  while (prefix < previous.length && prefix < value.length && previous[prefix] === value[prefix]) prefix += 1;
+  let matched = 0;
+  let wrong = 0;
+  for (let position = prefix; position < value.length; position += 1) {
+    if (value[position] === target[position]) matched += 1;
+    else wrong += 1;
+  }
+  return { matched, wrong };
+}
+
+const mapUrl = (country: Country, isFixed: boolean, mapMode: "map" | "satellite") => {
   const zoom = isFixed ? 2 : Math.min(country.zoom + 1, 10);
-  return `https://maps.google.com/maps?q=${country.lat},${country.lng}&z=${zoom}&output=embed&hl=ko`;
+  return `https://maps.google.com/maps?q=${country.lat},${country.lng}&z=${zoom}&t=${mapMode === "satellite" ? "k" : "m"}&output=embed&hl=ko`;
 };
 
 const MapFrames = memo(function MapFrames({
@@ -70,11 +86,13 @@ const MapFrames = memo(function MapFrames({
   loaded,
   onLoaded,
   isFixedMap,
+  mapMode,
 }: {
   index: number;
   loaded: Record<string, boolean>;
   onLoaded: (code: string) => void;
   isFixedMap: boolean;
+  mapMode: "map" | "satellite";
 }) {
   const visibleCountries = [lesson[index], lesson[(index + 1) % lesson.length]];
   const current = lesson[index];
@@ -82,10 +100,10 @@ const MapFrames = memo(function MapFrames({
     <>
       {visibleCountries.map((country) => (
         <iframe
-          key={`${country.code}-${isFixedMap ? "fixed" : "zoomed"}`}
-          src={mapUrl(country, isFixedMap)}
+          key={`${country.code}-${isFixedMap}-${mapMode}`}
+          src={mapUrl(country, isFixedMap, mapMode)}
           title={`${country.korean} 위치 지도`}
-          onLoad={() => onLoaded(country.code)}
+          onLoad={() => onLoaded(`${country.code}-${isFixedMap}-${mapMode}`)}
           aria-hidden={country.code !== current.code}
           tabIndex={country.code === current.code ? 0 : -1}
           className={`absolute inset-0 h-full w-full border-0 transition-opacity duration-300 ease-out ${
@@ -94,7 +112,7 @@ const MapFrames = memo(function MapFrames({
           loading="eager"
         />
       ))}
-      {!loaded[current.code] && (
+      {!loaded[`${current.code}-${isFixedMap}-${mapMode}`] && (
         <div className="pointer-events-none absolute left-1/2 top-5 z-20 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-semibold text-[#5d6e5f] shadow-sm">
           지도 불러오는 중
         </div>
@@ -111,12 +129,22 @@ function CountryTyping() {
   const [elapsed, setElapsed] = useState(0);
   const [correct, setCorrect] = useState(0);
   const [errors, setErrors] = useState(0);
+  const [matchedCharacters, setMatchedCharacters] = useState(0);
+  const [theme, setTheme] = useState(() => storedSetting("geo-typing-theme", "light") === "dark" ? "dark" : "light");
+  const [mapMode, setMapMode] = useState<"map" | "satellite">(() => storedSetting("geo-typing-map", "map") === "satellite" ? "satellite" : "map");
+  const [inputEpoch, setInputEpoch] = useState(0);
+  const composing = useRef(false);
+  const committedInput = useRef("");
   const [loaded, setLoaded] = useState<Record<string, boolean>>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const advancing = useRef(false);
   const audioContext = useRef<AudioContext | null>(null);
   const current = lesson[index];
   const target = language === "ko" ? current.korean : current.english;
+  useEffect(() => {
+    try { localStorage.setItem("geo-typing-theme", theme); localStorage.setItem("geo-typing-map", mapMode); } catch {}
+  }, [theme, mapMode]);
+  useEffect(() => () => { void audioContext.current?.close(); }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => setElapsed((value) => value + 1), 1000);
@@ -125,12 +153,16 @@ function CountryTyping() {
 
   const resetInput = useCallback(() => {
     advancing.current = false;
+    composing.current = false;
+    committedInput.current = "";
     setDisplayInput("");
+    setInputEpoch(value => value + 1);
     if (inputRef.current) {
       inputRef.current.value = "";
-      inputRef.current.focus();
     }
   }, []);
+
+  useEffect(() => { inputRef.current?.focus(); }, [inputEpoch]);
 
   useEffect(() => {
     resetInput();
@@ -196,35 +228,37 @@ function CountryTyping() {
     setIndex((value) => (value + 1) % lesson.length);
   };
 
-  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setDisplayInput(val);
-    playKeySound();
+  const commitInput = (value: string) => {
+    if (advancing.current || value === committedInput.current) return;
+    const result = evaluateTyping(committedInput.current, value, target);
+    committedInput.current = value;
+    setMatchedCharacters(total => total + result.matched);
+    setErrors(total => total + result.wrong);
+    if (result.matched + result.wrong > 0) playKeySound();
+    if (value === target) advance();
+  };
 
-    if (val === target) {
-      advance();
-      return;
-    }
-
-    if (!target.startsWith(val) && val.length > displayInput.length) {
-      setErrors((v) => v + 1);
-    }
+  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    if (event.currentTarget !== inputRef.current || advancing.current) return;
+    const value = event.currentTarget.value;
+    setDisplayInput(value);
+    if (!composing.current && !(event.nativeEvent as InputEvent).isComposing) commitInput(value);
   };
 
   const focusInput = () => {
     inputRef.current?.focus();
   };
 
-  const accuracy = correct + errors === 0 ? 100 : Math.round((correct / (correct + errors)) * 100);
+  const accuracy = matchedCharacters + errors === 0 ? 100 : Math.round((matchedCharacters / (matchedCharacters + errors)) * 100);
   const typedPerMinute = useMemo(
-    () => (elapsed ? Math.round(((correct * 4 + displayInput.length) / elapsed) * 60) : 0),
-    [correct, elapsed, displayInput.length]
+    () => (elapsed ? Math.round((matchedCharacters / elapsed) * 60) : 0),
+    [matchedCharacters, elapsed]
   );
   const time = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
 
   return (
-    <main className="flex min-h-screen flex-col overflow-hidden bg-[#edf3ec] text-[#17231a]">
-      <header className="flex h-16 shrink-0 items-center justify-between border-b border-[#d7e2d5] bg-white px-5 sm:px-8">
+    <main data-theme={theme} className="typing-room flex min-h-screen flex-col overflow-hidden">
+      <header className="typing-header flex min-h-16 shrink-0 items-center justify-between gap-3 px-5 py-3 sm:px-8">
         <div className="flex items-center gap-3">
           <Link to="/" className="grid h-9 w-9 place-items-center rounded-[11px] bg-[#3b9d44] text-sm font-black text-white">
             T
@@ -234,18 +268,20 @@ function CountryTyping() {
             <p className="text-[10px] font-medium text-[#809080]">세계시민과 지리 · 나라 이름 연습</p>
           </div>
         </div>
+        <div className="typing-theme" role="group" aria-label="화면 테마"><button type="button" aria-pressed={theme === "light"} onClick={() => setTheme("light")}>☀ 화이트</button><button type="button" aria-pressed={theme === "dark"} onClick={() => setTheme("dark")}>☾ 다크</button></div>
         <p className="hidden font-mono text-[11px] text-[#778778] sm:block">LESSON 01 / WORLD MAP</p>
       </header>
       <section className="relative flex min-h-0 flex-1 flex-col">
-        <div className="flex items-center justify-between bg-white/90 px-5 py-3 sm:px-10">
+        <div className="typing-progress flex items-center justify-between px-5 py-3 sm:px-10">
           <p className="text-sm font-semibold text-[#3b9d44]">
             {String(index + 1).padStart(2, "0")}{" "}
             <span className="font-normal text-[#95a295]">/ {String(lesson.length).padStart(2, "0")} 국가</span>
           </p>
           <p className="text-xs text-[#748174]">입력창을 터치하여 키보드를 여세요.</p>
         </div>
-        <div className="relative z-0 h-[35vh] min-h-[220px] shrink-0 overflow-hidden bg-[#dce8db] sm:h-[58vh] sm:min-h-[440px]">
-          <MapFrames index={index} loaded={loaded} onLoaded={markLoaded} isFixedMap={isFixedMap} />
+        <div className="typing-map relative z-0 h-[35vh] min-h-[220px] shrink-0 overflow-hidden sm:h-[48vh] sm:min-h-[340px]">
+          <MapFrames index={index} loaded={loaded} onLoaded={markLoaded} isFixedMap={isFixedMap} mapMode={mapMode} />
+          <div className="map-mode" role="group" aria-label="지도 보기 방식"><button type="button" aria-pressed={mapMode === "map"} onClick={() => setMapMode("map")}>◎ 지도</button><button type="button" aria-pressed={mapMode === "satellite"} onClick={() => setMapMode("satellite")}>◈ 위성</button><span>{current.code} · {current.lat.toFixed(1)}° / {current.lng.toFixed(1)}°</span></div>
           <div className="pointer-events-none absolute bottom-5 left-1/2 z-30 hidden -translate-x-1/2 rounded-full bg-white/95 px-5 py-2 text-[11px] font-semibold text-[#5d6e5f] shadow-lg sm:block">
             지도에서 나라의 윤곽과 주변 지역을 살펴보세요
           </div>
@@ -278,8 +314,8 @@ function CountryTyping() {
             </button>
           </div>
         </div>
-        <div className="relative z-50 shrink-0 border-t border-[#cfe0cf] bg-white px-4 pb-6 pt-0 shadow-[0_-10px_28px_rgba(24,52,28,.10)] sm:px-8">
-          <div className="mx-auto -mt-6 grid max-w-2xl grid-cols-4 overflow-hidden rounded-2xl border border-[#cbd9ca] bg-white shadow-[0_8px_24px_rgba(32,67,35,.18)]">
+        <div className="typing-deck relative z-50 shrink-0 px-4 pb-6 pt-0 sm:px-8">
+          <div className="typing-stats mx-auto -mt-6 grid max-w-2xl grid-cols-4 overflow-hidden rounded-2xl">
             {[
               { label: "시간", value: time },
               { label: "분당 타수", value: typedPerMinute },
@@ -293,18 +329,19 @@ function CountryTyping() {
             ))}
           </div>
           <div className="mx-auto mt-4 max-w-3xl text-center sm:mt-5">
-            <div className="border-y-2 border-[#3b9d44] py-2 sm:border-y-4 sm:py-3" onClick={focusInput}>
-              <p className="text-2xl font-bold tracking-[.1em] text-[#273b29] sm:text-5xl sm:tracking-[.15em]">{target}</p>
+            <div className="typing-prompt py-2 sm:py-3" onClick={focusInput}>
+              <p className="typing-eyebrow">EXPLORE THE WORLD · {current.code}</p>
+              <p className="typing-target text-2xl font-bold tracking-[.1em] sm:text-5xl sm:tracking-[.15em]">{target}</p>
               <div className="mt-2 flex flex-wrap justify-center gap-1.5 text-xl font-bold sm:mt-3 sm:gap-2 sm:text-3xl">
                 {Array.from(target).map((char, charIndex) => (
                   <span
                     key={`${char}-${charIndex}`}
-                    className={`grid h-8 min-w-8 place-items-center rounded-lg sm:h-10 sm:min-w-10 ${
+                    className={`typing-character grid h-8 min-w-8 place-items-center rounded-lg sm:h-10 sm:min-w-10 ${
                       displayInput[charIndex] === char
-                        ? "bg-[#e5f5e6] text-[#2b9138]"
+                        ? "is-correct"
                         : displayInput[charIndex]
-                        ? "bg-[#fff0ee] text-[#df5145]"
-                        : "bg-[#f2f5f1] text-[#bbc5bb]"
+                        ? "is-pending"
+                        : "is-empty"
                     }`}
                   >
                     {displayInput[charIndex] || char}
@@ -315,17 +352,28 @@ function CountryTyping() {
             </div>
             <div className="mt-4 flex justify-center">
               <input
+                key={`${index}-${language}-${inputEpoch}`}
                 ref={inputRef}
                 type="text"
                 onChange={handleChange}
+                aria-label={`${target} 나라 이름 입력`}
+                onCompositionStart={() => { composing.current = true; }}
+                onCompositionEnd={event => {
+                  if (event.currentTarget !== inputRef.current || advancing.current) return;
+                  composing.current = false;
+                  const value = event.currentTarget.value;
+                  setDisplayInput(value);
+                  commitInput(value);
+                }}
                 placeholder="여기를 터치하여 타자 입력"
-                className="w-full max-w-md rounded-xl border-2 border-[#3b9d44] bg-[#f7faf7] px-4 py-3 text-center text-base font-bold text-[#17231a] shadow-inner focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#3b9d44]"
+                className="typing-input w-full max-w-md rounded-xl px-4 py-3 text-center text-base font-bold focus:outline-none"
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"
                 spellCheck={false}
               />
             </div>
+            <p className="typing-caption">한글은 조합이 끝난 글자만 채점해요 · 정확도는 글자 단위 · 지도 모드는 다음 나라에도 유지돼요</p>
           </div>
         </div>
       </section>
@@ -392,11 +440,11 @@ function Launcher() {
 
 type Primary = "A" | "B" | "C" | "D" | "E";
 type ClimatePiece = { id: number; key: string; parts: Primary[]; x: number; y: number; angle: number };
-type ClimateBody = Matter.Body & { climateKey?: string; climateParts?: Primary[]; popped?: boolean };
+type ClimateBody = Matter.Body & { climateKey?: string; climateParts?: Primary[]; popped?: boolean; bornAt?: number; spilled?: boolean };
 type ClimateNode = { code: string; name: string; icon: string; color: string; size: number; next?: string };
 
 const climateGroups: { id: Primary; title: string; chain: string[]; color: string }[] = [
-  { id: "A", title: "열대", chain: ["Am", "Aw", "As", "Af", "A"], color: "#ed7555" },
+  { id: "A", title: "열대", chain: ["Aw", "Am", "Af", "A"], color: "#ed7555" },
   { id: "B", title: "건조", chain: ["BS", "BW", "B"], color: "#d7a84a" },
   { id: "C", title: "온대", chain: ["Cfb", "Cfa", "Csb", "Csa", "C"], color: "#5da873" },
   { id: "D", title: "냉대", chain: ["Df", "Dw", "Ds", "D"], color: "#668fc0" },
@@ -409,6 +457,9 @@ const climateNodes: Record<string, ClimateNode> = {
   Df: { code: "Df", name: "냉대 습윤", icon: "🌲", color: "#789cc7", size: 110, next: "Dw" }, Dw: { code: "Dw", name: "냉대 겨울건조", icon: "🏔️", color: "#5d82b3", size: 140, next: "Ds" }, Ds: { code: "Ds", name: "냉대 하계건조", icon: "🍂", color: "#6c8cb8", size: 166, next: "D" }, D: { code: "D", name: "냉대기후", icon: "🌲", color: "#5b78aa", size: 194 },
   ET: { code: "ET", name: "툰드라", icon: "❄️", color: "#a9d5dc", size: 112, next: "EF" }, EF: { code: "EF", name: "빙설", icon: "🧊", color: "#d1ebee", size: 148, next: "E" }, E: { code: "E", name: "한대기후", icon: "🧊", color: "#9fc4d6", size: 194 },
 };
+climateNodes.Aw = { ...climateNodes.Aw, size: 104, next: "Am" };
+climateNodes.Am = { ...climateNodes.Am, size: 132, next: "Af" };
+delete climateNodes.As;
 const fusionEntries = [
   ["AB", "🏜️", "열대사막"], ["AC", "🏝️", "온대정글"], ["AD", "⚡", "빙하화산"], ["AE", "🌋", "초열동토"], ["BC", "🌾", "온대초원"], ["BD", "❄️", "빙황무지"], ["BE", "🧊", "하얀사막"], ["CD", "🍁", "온냉대림"], ["CE", "🏔️", "빙하의봄"], ["DE", "🌌", "극한겨울"],
   ["ABC", "🏺", "열대오아"], ["ABD", "🌋", "화산황무"], ["ABE", "☄️", "열사빙하"], ["ACD", "🌿", "사계정글"], ["ACE", "🌊", "간헐천섬"], ["ADE", "🧊", "녹는빙하"], ["BCD", "🐎", "유라시아"], ["BCE", "🏜️", "대륙빙하"], ["BDE", "🌬️", "시베리아"], ["CDE", "🌲", "북유럽숲"],
@@ -420,6 +471,61 @@ function nodeFor(key: string): ClimateNode {
   return { ...node, size: Math.round(node.size * 0.96) };
 }
 
+function comboReward(count: number) {
+  const labels = ["Good!", "Great!", "Perfect!", "Excellent!", "Marvelous!!"];
+  const multiplier = Math.max(1, count - 4);
+  return { label: `${labels[Math.min(count, 5) - 1]}${count > 5 ? ` ×${multiplier}` : ""}`, points: count <= 5 ? count * 10 : 50 * multiplier };
+}
+
+function ClimateAtlas({ onClose }: { onClose: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [selected, setSelected] = useState("ABCDE");
+  const keys = [...climateGroups.map(group => group.id), ...fusionEntries.map(entry => entry[0])];
+  const positions = Object.fromEntries(keys.map(key => {
+    const tier = keys.filter(candidate => candidate.length === key.length);
+    return [key, { x: 90 + (key.length - 1) * 205, y: 55 + (tier.indexOf(key) + .5) * (620 / tier.length) }];
+  }));
+  const recipes: { first: string; second: string; result: string }[] = [];
+  for (let first = 0; first < keys.length; first += 1) {
+    for (let second = first + 1; second < keys.length; second += 1) {
+      const result = [...keys[first], ...keys[second]].sort().join("");
+      if (![...keys[first]].some(part => keys[second].includes(part)) && fusions[result]) recipes.push({ first: keys[first], second: keys[second], result });
+    }
+  }
+  const links = [...new Set(recipes.flatMap(recipe => [`${recipe.first}:${recipe.result}`, `${recipe.second}:${recipe.result}`]))];
+  useEffect(() => { dialogRef.current?.showModal(); }, []);
+  return <dialog ref={dialogRef} onCancel={onClose} className="climate-atlas" aria-labelledby="atlas-title">
+    <header><div><p>CLIMATE CONNECTIONS</p><h2 id="atlas-title">지구를 만드는 합성 지도</h2></div><button autoFocus type="button" onClick={onClose} aria-label="합성 도감 닫기">닫기 ×</button></header>
+    <p className="atlas-intro">같은 세부 기후 2개를 합쳐 대분류를 완성하세요. A–E는 서로 겹치지 않는 구성끼리만 합성됩니다. 노드를 눌러 모든 조합을 확인하세요.</p>
+    <div className="atlas-routes">{climateGroups.map(group => <section key={group.id}><b>{group.id} · {group.title}</b><p>{group.chain.join(" → ")}</p></section>)}</div>
+    <div className="atlas-scroll"><div className="atlas-map">
+      <div className="atlas-tiers">{["대분류", "2개 기후", "3개 기후", "4개 기후", "지구"].map(label => <span key={label}>{label}</span>)}</div>
+      <svg viewBox="0 0 1000 700" aria-hidden="true">{links.map(link => {
+        const [from, to] = link.split(":"); const start = positions[from]; const end = positions[to];
+        const highlighted = to === selected;
+        return <path key={link} d={`M ${start.x} ${start.y} C ${start.x + 95} ${start.y}, ${end.x - 95} ${end.y}, ${end.x} ${end.y}`} fill="none" stroke={highlighted ? "#e4f252" : "#a0c6a0"} strokeWidth={highlighted ? 2.5 : 1} opacity={highlighted ? .9 : .12} />;
+      })}</svg>
+      {keys.map(key => { const node = nodeFor(key); const position = positions[key]; return <button key={key} type="button" aria-pressed={selected === key} onClick={() => setSelected(key)} className={`atlas-node ${selected === key ? "is-selected" : ""}`} style={{ left: `${position.x / 10}%`, top: `${position.y / 7}%` }}><span>{node.icon} <b>{key}</b></span><small>{node.name}</small></button>; })}
+    </div></div>
+    <section className="atlas-recipes" aria-live="polite"><b>{selected} · {nodeFor(selected).name}</b><div>{selected.length === 1 ? <span>{climateGroups.find(group => group.id === selected)?.chain.join(" → ")} · 각 단계는 같은 공 2개</span> : recipes.filter(recipe => recipe.result === selected).map(recipe => <span key={`${recipe.first}:${recipe.second}`}>{recipe.first} + {recipe.second} → {recipe.result}</span>)}</div></section>
+    <p className="atlas-note">중간 조합 이름은 게임용 표현이며 실제 쾨펜 기후 분류가 아닙니다. 3차 구분은 a·b만 사용합니다.</p>
+  </dialog>;
+}
+
+function ClimateHelp({ onClose }: { onClose: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => { dialogRef.current?.showModal(); }, []);
+  return <dialog ref={dialogRef} onCancel={onClose} className="climate-atlas climate-help" aria-labelledby="help-title">
+    <header><div><p>HOW TO PLAY</p><h2 id="help-title">작은 기후에서, 지구까지.</h2></div><button autoFocus type="button" onClick={onClose}>닫기 ×</button></header>
+    <div className="help-steps">
+      <section><span>01</span><div><h3>위치를 고르고 톡!</h3><p>바구니 안을 누르면 기후 공이 떨어져요. 열대·건조·온대·냉대·한대 버튼은 다음에 떨어뜨릴 기후만 바꾸고, 바구니는 그대로 유지돼요.</p></div></section>
+      <section><span>02</span><div><h3>같은 공을 만나게 해주세요</h3><p>같은 세부 기후 공 2개가 만나면 다음 단계로 진화해요. 완성한 A–E는 겹치지 않는 구성끼리 합칠 수 있어요. 전체 경로는 ‘합성 지도’에서 확인하세요.</p></div></section>
+      <section><span>03</span><div><h3>연쇄 합성으로 콤보!</h3><p>방금 만들어진 공이 <b>1.5초 안에 다시 합성</b>되면 콤보가 이어져요. 새 공을 떨어뜨리거나, 다른 공끼리 합성되거나, 시간이 지나면 콤보가 끊겨요.</p><p className="help-score">Good! 10점 → Great! 20점 → Perfect! 30점 → Excellent! 40점 → Marvelous!! 50점</p><p>그 다음은 Marvelous!! ×2 = 100점, ×3 = 150점… 지구 완성은 <b>10,000점</b>이에요.</p></div></section>
+      <section><span>04</span><div><h3>넘치기 전에 공간을 만들어요</h3><p>공이 바구니 위로 넘쳐 바깥 바닥에 떨어지면 게임 오버! 옆벽에 닿는 것만으로 끝나지는 않아요. ‘♪ 소리’ 버튼으로 효과음을 켜거나 끌 수 있어요.</p></div></section>
+    </div><p className="atlas-note">설명을 읽는 동안 게임은 일시정지돼요. 중간 조합은 게임용 표현이며 실제 기후 분류와는 달라요.</p>
+  </dialog>;
+}
+
 function ClimateMerge() {
   const [pieces, setPieces] = useState<ClimatePiece[]>([]);
   const [activePrimary, setActivePrimary] = useState<Primary>("A");
@@ -428,6 +534,14 @@ function ClimateMerge() {
   const [gameOver, setGameOver] = useState(false);
   const [ready, setReady] = useState(true);
   const [previewX, setPreviewX] = useState(320);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [combo, setCombo] = useState(0);
+  const [atlasOpen, setAtlasOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [bursts, setBursts] = useState<{ id: number; x: number; y: number; color: string; count: number; earth: boolean; earned: number }[]>([]);
+  const soundRef = useRef(true);
+  const comboRef = useRef<{ count: number; time: number; bodyId: number | null }>({ count: 0, time: 0, bodyId: null });
+  const burstTimers = useRef<number[]>([]);
   const boardRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<Matter.Engine | null>(null);
   const runnerRef = useRef<Matter.Runner | null>(null);
@@ -443,12 +557,20 @@ function ClimateMerge() {
   const previewPositionRef = useRef(320);
   const previewFrameRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const gameOverTimer = useRef<number | null>(null);
   const gameWidth = 640;
   const gameHeight = 800;
   const basketRim = 92;
-  const basketInset = 18;
-  const basketBottom = 778;
+  const basketInset = 30;
+  const basketBottom = 765;
   const activeGroup = climateGroups.find((group) => group.id === activePrimary)!;
+  useEffect(() => {
+    const runner = runnerRef.current;
+    const engine = engineRef.current;
+    if (!runner || !engine || endedRef.current) return;
+    if (atlasOpen || helpOpen) Matter.Runner.stop(runner);
+    else { comboRef.current = { count: 0, time: 0, bodyId: null }; setCombo(0); Matter.Runner.run(runner, engine); }
+  }, [atlasOpen, helpOpen]);
   const randomDropKey = useCallback((group: (typeof climateGroups)[number]) => {
     const candidates = group.chain.slice(0, Math.min(3, group.chain.length - 1));
     return candidates[Math.floor(Math.random() * candidates.length)];
@@ -458,16 +580,35 @@ function ClimateMerge() {
     setNextKey(randomDropKey(activeGroup));
   }, [activePrimary, activeGroup, randomDropKey]);
 
-  const playMergeSound = (kind: "step" | "region" | "earth") => {
+  const playMergeSound = (kind: "step" | "region" | "earth" | "drop" | "over") => {
+    if (!soundRef.current) return;
     try {
       const context = audioContextRef.current ?? new AudioContext();
       audioContextRef.current = context;
-      const notes = kind === "earth" ? [261.6, 329.6, 392, 523.2, 659.2] : kind === "region" ? [392, 523.2, 659.2] : [440, 554.4];
+      const tier = Math.min(8, Math.max(1, comboRef.current.count));
+      const festive = kind === "step" || kind === "region" || kind === "earth";
+      const melody = [392, 493.88, 587.33, 783.99, 987.77, 1174.66, 1567.98, 1975.53];
+      const notes = kind === "over" ? [220, 164.8, 110] : kind === "drop" ? [180] : kind === "earth" ? melody : melody.slice(0, Math.min(8, tier + 1));
       const play = () => notes.forEach((frequency, index) => {
         const oscillator = context.createOscillator(); const gain = context.createGain(); const start = context.currentTime + index * (kind === "earth" ? 0.1 : 0.055);
         oscillator.type = kind === "earth" ? "sine" : "triangle"; oscillator.frequency.setValueAtTime(frequency, start);
-        gain.gain.setValueAtTime(kind === "earth" ? 0.07 : 0.045, start); gain.gain.exponentialRampToValueAtTime(0.001, start + (kind === "earth" ? 0.65 : 0.22));
+        gain.gain.setValueAtTime(0.001, start); gain.gain.linearRampToValueAtTime(kind === "earth" ? 0.055 : 0.04, start + 0.008); gain.gain.exponentialRampToValueAtTime(0.001, start + (kind === "earth" ? 0.65 : 0.22));
         oscillator.connect(gain).connect(context.destination); oscillator.start(start); oscillator.stop(start + (kind === "earth" ? 0.7 : 0.25));
+        if (festive) {
+          const harmonics = kind === "earth" || tier >= 5 ? [0.5, 1.25, 1.5, 2] : tier >= 3 ? [1.5, 2] : [2];
+          harmonics.forEach((ratio, layer) => {
+          const harmony = context.createOscillator();
+          const envelope = context.createGain();
+          const shimmerStart = start + (ratio === 2 ? 0.07 : layer * 0.012);
+          harmony.type = "sine";
+          harmony.frequency.setValueAtTime(frequency * ratio, shimmerStart);
+          envelope.gain.setValueAtTime(0.001, shimmerStart);
+          envelope.gain.linearRampToValueAtTime(0.014 / Math.sqrt(harmonics.length), shimmerStart + 0.012);
+          envelope.gain.exponentialRampToValueAtTime(0.001, shimmerStart + (tier >= 5 ? 0.6 : 0.35));
+          harmony.connect(envelope).connect(context.destination);
+          harmony.start(shimmerStart); harmony.stop(shimmerStart + 0.65);
+          });
+        }
       });
       if (context.state === "suspended") void context.resume().then(play); else play();
     } catch { /* audio is optional */ }
@@ -477,7 +618,7 @@ function ClimateMerge() {
     const engine = engineRef.current;
     if (!engine) return;
     const now = performance.now();
-    if (!force && now - lastSyncRef.current < 34) return;
+    if (!force && now - lastSyncRef.current < 1000 / 60) return;
     lastSyncRef.current = now;
     setPieces(
       Matter.Composite.allBodies(engine.world)
@@ -489,33 +630,36 @@ function ClimateMerge() {
   const makeClimateBody = useCallback((x: number, y: number, key: string, parts: Primary[] = []) => {
     const node = nodeFor(key);
     const body = Matter.Bodies.circle(x, y, node.size / 2, {
-      friction: 0.12,
-      frictionStatic: 0.46,
-      frictionAir: 0.02,
-      restitution: 0.008,
+      friction: 0.035,
+      frictionStatic: 0.08,
+      frictionAir: 0.004,
+      restitution: 0.08,
       slop: 0.02,
       label: "climate-piece",
     }) as ClimateBody;
     body.climateKey = key;
-    body.climateParts = parts;
+    body.climateParts = parts.length ? parts : key.length === 1 ? [key as Primary] : [];
+    body.bornAt = performance.now();
     body.popped = false;
     body.sleepThreshold = 30;
     return body;
   }, []);
 
   useEffect(() => {
+    try { highScoreRef.current = Number(localStorage.getItem("geo-climate-best")) || 0; } catch {}
     const engine = Matter.Engine.create({
-      enableSleeping: true,
-      gravity: { x: 0, y: 0.78, scale: 0.001 },
-      positionIterations: 8,
-      velocityIterations: 6,
+      enableSleeping: false,
+      gravity: { x: 0, y: 1, scale: 0.001 },
+      positionIterations: 12,
+      velocityIterations: 8,
     });
-    const runner = Matter.Runner.create({ maxFrameTime: 1000 / 30, maxUpdates: 2 });
-    const wallOptions = { isStatic: true, friction: 0.3, restitution: 0.015, label: "wall" };
+    const runner = Matter.Runner.create({ delta: 1000 / 120, maxFrameTime: 1000 / 30, maxUpdates: 8 });
+    const wallOptions = { isStatic: true, friction: 0.03, restitution: 0.04, label: "wall" };
     const walls = [
-      Matter.Bodies.rectangle(basketInset - 40, (basketRim + basketBottom) / 2, 80, basketBottom - basketRim + 80, wallOptions),
-      Matter.Bodies.rectangle(gameWidth - basketInset + 40, (basketRim + basketBottom) / 2, 80, basketBottom - basketRim + 80, wallOptions),
-      Matter.Bodies.rectangle(gameWidth / 2, basketBottom + 48, gameWidth + 160, 96, wallOptions),
+      Matter.Bodies.rectangle(basketInset - 6, (basketRim + basketBottom) / 2, 12, basketBottom - basketRim, wallOptions),
+      Matter.Bodies.rectangle(gameWidth - basketInset + 6, (basketRim + basketBottom) / 2, 12, basketBottom - basketRim, wallOptions),
+      Matter.Bodies.rectangle(gameWidth / 2, basketBottom + 6, gameWidth - basketInset * 2 + 24, 12, wallOptions),
+      Matter.Bodies.rectangle(gameWidth / 2, basketBottom + 38, 10000, 40, { ...wallOptions, label: "outside-ground" }),
     ];
     engineRef.current = engine;
     runnerRef.current = runner;
@@ -527,8 +671,11 @@ function ClimateMerge() {
       endedRef.current = true;
       readyRef.current = false;
       setReady(false);
-      setGameOver(true);
+      gameOverTimer.current = window.setTimeout(() => setGameOver(true), 650);
+      playMergeSound("over");
       highScoreRef.current = Math.max(highScoreRef.current, scoreRef.current);
+      try { localStorage.setItem("geo-climate-best", String(highScoreRef.current)); } catch {}
+      syncPieces(true);
       Matter.Runner.stop(runner);
     };
 
@@ -540,30 +687,33 @@ function ClimateMerge() {
 
       for (const body of climateBodies) {
         const radius = body.circleRadius ?? 0;
-        // This hard guard runs every physics tick: no piece can tunnel below or through the basket walls.
-        if (body.position.y + radius > basketBottom) {
-          Matter.Body.setPosition(body, { x: body.position.x, y: basketBottom - radius });
-          Matter.Body.setVelocity(body, { x: body.velocity.x * 0.2, y: 0 });
-        }
-        if (body.position.x - radius < basketInset) Matter.Body.setPosition(body, { x: basketInset + radius, y: body.position.y });
-        if (body.position.x + radius > gameWidth - basketInset) Matter.Body.setPosition(body, { x: gameWidth - basketInset - radius, y: body.position.y });
-        if (now - lastSafetyCheckRef.current < 80) continue;
-        if (body.position.y - radius > basketRim) enteredBasketRef.current.add(body.id);
-        // Newly dropped pieces may pass the rim; only pieces pushed back out of the basket end the game.
-        if (enteredBasketRef.current.has(body.id) && body.position.y - radius < basketRim) {
-          endGame();
-          break;
+        if (body.popped) continue;
+        const outside = body.position.x < basketInset || body.position.x > gameWidth - basketInset;
+        if (body.position.y + radius <= basketRim && outside) body.spilled = true;
+        if (!body.spilled && body.position.y + radius > basketRim) {
+          const x = Math.max(basketInset + radius, Math.min(gameWidth - basketInset - radius, body.position.x));
+          const y = Math.min(body.position.y, basketBottom - radius);
+          if (x !== body.position.x || y !== body.position.y) {
+            const hitSide = x !== body.position.x;
+            const hitFloor = y !== body.position.y;
+            const horizontalVelocity = hitSide ? x > body.position.x ? Math.max(0, body.velocity.x) : Math.min(0, body.velocity.x) : body.velocity.x;
+            Matter.Body.setPosition(body, { x, y });
+            Matter.Body.setVelocity(body, { x: horizontalVelocity, y: hitFloor ? Math.min(0, body.velocity.y) : body.velocity.y });
+          }
         }
       }
+      if (comboRef.current.count > 0 && now - comboRef.current.time >= 1500) {
+        comboRef.current = { count: 0, time: 0, bodyId: null };
+        setCombo(0);
+      }
       if (now - lastSafetyCheckRef.current >= 80) lastSafetyCheckRef.current = now;
-      // Fallback merge sweep: catches equal pieces that came to rest while already overlapping.
       for (let index = 0; index < climateBodies.length; index += 1) {
         for (let other = index + 1; other < climateBodies.length; other += 1) {
           const a = climateBodies[index];
           const b = climateBodies[other];
-          if (a.climateKey !== b.climateKey || a.popped || b.popped) continue;
+          if (a.popped || b.popped) continue;
           const distance = Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y);
-          if (distance <= ((a.circleRadius ?? 0) + (b.circleRadius ?? 0)) * 0.98) {
+          if (distance <= (a.circleRadius ?? 0) + (b.circleRadius ?? 0) + 0.6) {
             onCollision({ pairs: [{ bodyA: a, bodyB: b }] } as unknown as Matter.IEventCollision<Matter.Engine>);
           }
         }
@@ -572,11 +722,13 @@ function ClimateMerge() {
     };
 
     const onCollision = (event: Matter.IEventCollision<Matter.Engine>) => {
+      if (endedRef.current) return;
       for (const { bodyA, bodyB } of event.pairs) {
         const a = bodyA as ClimateBody;
         const b = bodyB as ClimateBody;
+        if ((a.label === "outside-ground" && b.spilled && !b.popped) || (b.label === "outside-ground" && a.spilled && !a.popped)) { endGame(); return; }
         if (a.isStatic || b.isStatic) continue;
-        if (!a.climateKey || !b.climateKey || a.popped || b.popped) continue;
+        if (!a.climateKey || !b.climateKey || a.popped || b.popped || a.spilled || b.spilled) continue;
         const aParts = a.climateParts ?? [];
         const bParts = b.climateParts ?? [];
         const sharesClimate = aParts.some((part) => bParts.includes(part));
@@ -591,12 +743,25 @@ function ClimateMerge() {
         if (!nextKey) continue;
         a.popped = true;
         b.popped = true;
-        const merged = makeClimateBody((a.position.x + b.position.x) / 2, (a.position.y + b.position.y) / 2, nextKey, nextParts);
-        Matter.Body.setVelocity(merged, { x: (a.velocity.x + b.velocity.x) * 0.12, y: Math.max(0.05, (a.velocity.y + b.velocity.y) * 0.12) });
-        Matter.Body.setAngularVelocity(merged, (a.angularVelocity + b.angularVelocity) * 0.12);
+        const radius = nodeFor(nextKey).size / 2;
+        const merged = makeClimateBody(Math.max(basketInset + radius, Math.min(gameWidth - basketInset - radius, (a.position.x + b.position.x) / 2)), Math.min(basketBottom - radius, (a.position.y + b.position.y) / 2), nextKey, nextParts);
+        if (enteredBasketRef.current.has(a.id) || enteredBasketRef.current.has(b.id)) enteredBasketRef.current.add(merged.id);
+        enteredBasketRef.current.delete(a.id);
+        enteredBasketRef.current.delete(b.id);
+        const totalMass = a.mass + b.mass;
+        Matter.Body.setVelocity(merged, { x: (a.velocity.x * a.mass + b.velocity.x * b.mass) / totalMass, y: (a.velocity.y * a.mass + b.velocity.y * b.mass) / totalMass });
+        Matter.Body.setAngularVelocity(merged, (a.angularVelocity + b.angularVelocity) * 0.35);
         Matter.Composite.remove(engine.world, [a, b]);
         Matter.Composite.add(engine.world, merged);
-        const earned = nextKey === "ABCDE" ? 100000 : fusions[nextKey] ? nextParts.length * 500 : nextKey.length === 1 ? 1000 : 100;
+        const now = performance.now();
+        const continuesChain = comboRef.current.count > 0 && now - comboRef.current.time < 1500 && (a.id === comboRef.current.bodyId || b.id === comboRef.current.bodyId);
+        const count = continuesChain ? comboRef.current.count + 1 : 1;
+        const earned = nextKey === "ABCDE" ? 10000 : comboReward(count).points;
+        comboRef.current = { count, time: now, bodyId: merged.id };
+        setCombo(count);
+        const id = merged.id;
+        setBursts(previous => [...previous.slice(-8), { id, x: merged.position.x, y: merged.position.y, color: nodeFor(nextKey).color, count, earth: nextKey === "ABCDE", earned }]);
+        burstTimers.current.push(window.setTimeout(() => setBursts(previous => previous.filter(burst => burst.id !== id)), 1000));
         playMergeSound(nextKey === "ABCDE" ? "earth" : nextKey.length === 1 || Boolean(fusions[nextKey]) ? "region" : "step");
         scoreRef.current += earned;
         setScore(scoreRef.current);
@@ -611,6 +776,10 @@ function ClimateMerge() {
       Matter.Events.off(engine, "afterUpdate", onAfterUpdate);
       if (dropDelayRef.current) window.clearTimeout(dropDelayRef.current);
       if (previewFrameRef.current) window.cancelAnimationFrame(previewFrameRef.current);
+      burstTimers.current.forEach(window.clearTimeout);
+      if (gameOverTimer.current) window.clearTimeout(gameOverTimer.current);
+      void audioContextRef.current?.close();
+      audioContextRef.current = null;
       Matter.Runner.stop(runner);
       Matter.Engine.clear(engine);
     };
@@ -618,7 +787,7 @@ function ClimateMerge() {
 
   const queuePreview = (event: PointerEvent<HTMLDivElement>) => {
     const rect = boardRef.current?.getBoundingClientRect();
-    const radius = climateNodes[nextKey].size / 2;
+    const radius = nodeFor(nextKey).size / 2;
     if (!rect || !ready) return;
     previewPositionRef.current = Math.max(basketInset + radius, Math.min(gameWidth - basketInset - radius, ((event.clientX - rect.left) / rect.width) * gameWidth));
     if (previewFrameRef.current) return;
@@ -632,9 +801,12 @@ function ClimateMerge() {
     const rect = boardRef.current?.getBoundingClientRect();
     if (!rect) return;
     if (!readyRef.current || endedRef.current || !engineRef.current) return;
-    const radius = climateNodes[nextKey].size / 2;
+    comboRef.current = { count: 0, time: 0, bodyId: null };
+    setCombo(0);
+    const radius = nodeFor(nextKey).size / 2;
     const x = Math.max(basketInset + radius, Math.min(gameWidth - basketInset - radius, ((event.clientX - rect.left) / rect.width) * gameWidth));
     Matter.Composite.add(engineRef.current.world, makeClimateBody(x, 42, nextKey));
+    playMergeSound("drop");
     setNextKey(randomDropKey(activeGroup));
     readyRef.current = false;
     setReady(false);
@@ -651,6 +823,11 @@ function ClimateMerge() {
     Matter.Composite.clear(engine.world, false, true);
     Matter.Composite.add(engine.world, wallsRef.current);
     enteredBasketRef.current.clear();
+    if (gameOverTimer.current) window.clearTimeout(gameOverTimer.current);
+    burstTimers.current.forEach(window.clearTimeout);
+    burstTimers.current = [];
+    comboRef.current = { count: 0, time: 0, bodyId: null };
+    setCombo(0); setBursts([]); setNextKey(randomDropKey(activeGroup));
     if (dropDelayRef.current) window.clearTimeout(dropDelayRef.current);
     scoreRef.current = 0;
     endedRef.current = false;
@@ -662,15 +839,20 @@ function ClimateMerge() {
   };
 
   return (
-    <main className="h-[100dvh] overflow-hidden bg-[#d8ece5] text-[#17342f]">
+    <main className="climate-arcade h-[100dvh] overflow-hidden text-[#17342f]">
       <div className="relative h-full">
-        <header className="absolute inset-x-4 top-4 z-50 flex items-center justify-between gap-4 sm:inset-x-7 sm:top-6">
+        <p className="climate-disclaimer">여기에는 없는 기후도 있기에 전부다 믿지는 마세요</p>
+        <header className="arcade-header absolute inset-x-4 top-4 z-50 flex items-center justify-between gap-4 sm:inset-x-7 sm:top-6">
           <Link to="/" className="rounded-full border border-[#c6b58e] bg-[#fffaf0] px-4 py-2 text-xs font-bold transition hover:bg-white">
             ← 게임 선택
           </Link>
           <div className="text-right leading-tight">
             <p className="font-mono text-[10px] tracking-[.16em] text-[#5b7d58]">KÖPPEN CLIMATE MERGE</p>
             <p className="mt-1 text-xl font-black tabular-nums">점수 <span className="text-[#cf6349]">{score}</span></p>
+          </div>
+          <div className="arcade-controls">
+            <button type="button" aria-pressed={soundEnabled} onClick={() => { soundRef.current = !soundEnabled; setSoundEnabled(!soundEnabled); if (!soundEnabled) playMergeSound("step"); }}>{soundEnabled ? "♪ 소리 켜짐" : "♪ 소리 꺼짐"}</button>
+            <button type="button" onClick={resetGame}>↻ 다시 시작</button>
           </div>
         </header>
         <section className="hidden">
@@ -680,7 +862,7 @@ function ClimateMerge() {
           </div>
           <p className="max-w-sm text-xs leading-relaxed text-[#637565] sm:text-sm">기후 조각을 합쳐 보세요. 원하는 학습 단계 버튼을 눌러 조각에 표시되는 구분 정보를 바꿀 수 있어요.</p>
         </section>
-        <nav aria-label="만들 기후 권역" className="absolute right-3 top-1/2 z-[60] w-[76px] -translate-y-1/2 rounded-[20px] border border-white/60 bg-[#fffaf0]/95 p-1.5 shadow-[0_8px_24px_rgba(31,61,51,.22)] backdrop-blur sm:right-6 sm:w-[88px]">
+        <nav aria-label="만들 기후 권역" className="climate-selector absolute right-3 top-1/2 z-[60] w-[76px] -translate-y-1/2 rounded-[20px] border border-white/60 bg-[#fffaf0]/95 p-1.5 shadow-[0_8px_24px_rgba(31,61,51,.22)] backdrop-blur sm:right-6 sm:w-[88px]">
           <div className="grid grid-cols-1 gap-1.5">
             {climateGroups.map((group) => (
               <button key={group.id} type="button" onClick={() => setActivePrimary(group.id)} aria-pressed={activePrimary === group.id} className={`rounded-[16px] px-2 py-3 text-center transition ${activePrimary === group.id ? "bg-[#17342f] text-white shadow-[0_4px_0_#0e241e]" : "bg-[#f4f0e5] text-[#5d705c] hover:bg-[#e8efdF]"}`}>
@@ -689,19 +871,16 @@ function ClimateMerge() {
               </button>
             ))}
           </div>
-          <details className="mt-2 border-t border-[#d8d1bb] pt-2 text-[9px] text-[#526650]">
-            <summary className="cursor-pointer text-center font-bold">합성 도감</summary>
-            <div className="mt-2 max-h-40 space-y-1 overflow-y-auto text-[8px]">
-              {fusionEntries.map(([key, icon, name]) => <p key={key}>{key.split("").join("+")} · {icon} {name}</p>)}
-            </div>
-          </details>
+          <button type="button" onClick={() => setAtlasOpen(true)} className="atlas-launch">⌘ 합성 지도</button>
         </nav>
         <div className="h-full">
+          <div className="climate-scene">
+          <div className="outside-floor" aria-hidden="true"><span>바구니 밖 바닥 · 여기에 떨어지면 게임 오버</span></div>
           <section
             ref={boardRef}
             onPointerMove={queuePreview}
             onPointerDown={drop}
-            className="relative mx-auto aspect-[4/5] h-[100dvh] w-auto max-w-full touch-none overflow-hidden rounded-none bg-[radial-gradient(circle_at_20%_10%,rgba(255,255,255,.64),transparent_24%),linear-gradient(162deg,#b7deeb_0%,#d8ece5_46%,#d9e8b5_47%,#bdd89a_100%)] shadow-[inset_0_0_0_4px_rgba(255,255,255,.48),0_13px_0_#24463c]"
+            className="climate-board relative mx-auto aspect-[4/5] touch-none overflow-hidden"
           >
             <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-[linear-gradient(180deg,rgba(255,255,255,.4),transparent)]" />
             <div className="pointer-events-none absolute inset-x-[3%] bottom-[3%] top-[11.5%] z-10 overflow-hidden rounded-b-[34px] border-x-[11px] border-b-[11px] border-[#e5b865]/85 bg-[linear-gradient(110deg,rgba(255,255,255,.32),rgba(255,242,186,.14)_35%,rgba(255,255,255,.06)_62%,rgba(181,126,57,.12))] shadow-[inset_12px_0_18px_rgba(255,255,255,.36),inset_-11px_0_18px_rgba(129,83,31,.2),inset_0_-8px_12px_rgba(132,81,28,.2),0_5px_0_rgba(111,74,36,.18)]">
@@ -714,9 +893,6 @@ function ClimateMerge() {
             <p className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2 whitespace-nowrap rounded-full border border-white/70 bg-[#fffdf5]/85 px-4 py-2 text-xs font-bold text-[#315c4f] shadow-sm">
               {ready ? "위치를 고르고 눌러 조각을 떨어뜨리세요" : "조각이 착지하는 중…"}
             </p>
-            <p className="pointer-events-none absolute left-1/2 top-[74px] z-10 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium tracking-wide text-[#315c4f]/45">
-              여기에는 없는 기후도 있기에 전부다 믿지는 마세요
-            </p>
             <p className="pointer-events-none absolute left-6 top-[11.5%] z-40 -translate-y-1/2 rounded-full bg-[#8d5626]/80 px-2 py-0.5 font-mono text-[8px] font-bold tracking-[.16em] text-white/90">BASKET RIM</p>
             <p className="pointer-events-none absolute bottom-[5%] left-7 z-20 font-mono text-[9px] tracking-[.22em] text-[#315c4f]/60">MERGE BASKET · CLIMATE BELTS</p>
             {ready && !gameOver && <div className="pointer-events-none absolute top-[38px] z-40 -translate-x-1/2" style={{ left: `${(previewX / gameWidth) * 100}%` }}><div className="h-10 border-l-2 border-dashed border-[#315c4f]/55" /><div className="relative grid h-12 w-12 -translate-x-[23px] place-items-center overflow-hidden rounded-full border-2 border-white/90 text-xs font-black text-[#17342f] shadow-[0_4px_0_rgba(35,78,64,.2)]" style={{ backgroundColor: nodeFor(nextKey).color }}><span className="absolute left-2 top-1 h-3 w-5 rotate-[-28deg] rounded-full bg-white/70" />{nodeFor(nextKey).code}</div></div>}
@@ -725,26 +901,32 @@ function ClimateMerge() {
               return (
                 <div
                   key={piece.id}
-                  className="absolute z-20 grid -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-[3px] border-white/85 shadow-[inset_6px_6px_8px_rgba(255,255,255,.3),inset_-7px_-8px_9px_rgba(35,75,61,.2),0_5px_0_rgba(28,72,62,.18),0_7px_13px_rgba(28,72,62,.14)] will-change-transform"
+                  className="climate-ball pointer-events-none absolute z-20 grid place-items-center rounded-full border-[2px] border-white/85 shadow-[inset_6px_6px_8px_rgba(255,255,255,.3),inset_-7px_-8px_9px_rgba(35,75,61,.2)] will-change-transform"
                   style={{
                     left: `${(piece.x / gameWidth) * 100}%`,
                     top: `${(piece.y / gameHeight) * 100}%`,
                     width: `${(climate.size / gameWidth) * 100}%`, aspectRatio: "1 / 1",
                     backgroundColor: climate.color,
-                    fontSize: `${climate.size * 0.48}px`,
+                    fontSize: `${climate.size / gameWidth * 48}cqw`,
                     transform: `translate(-50%, -50%) rotate(${piece.angle}rad)`,
                   }}
                 >
                   <span className="absolute inset-[8%] rounded-full border border-white/35" />
                   <span className="absolute left-[16%] top-[11%] h-[18%] w-[32%] rotate-[-28deg] rounded-full bg-white/60" />
                   <span className="absolute bottom-[11%] right-[13%] h-[13%] w-[13%] rounded-full bg-white/30" />
-                  <span className="relative font-black tracking-[-.1em] text-[#17342f] drop-shadow-[0_1px_0_rgba(255,255,255,.45)]" style={{ fontSize: `${Math.max(10, climate.size * 0.27)}px` }}>{climate.code}</span>
+                  <span className="relative font-black tracking-[-.04em] text-[#17342f] drop-shadow-[0_1px_0_rgba(255,255,255,.45)]" style={{ fontSize: `${climate.size / gameWidth * (climate.code.length > 3 ? 18 : 27)}cqw` }}>{climate.code}</span>
                   <span className="absolute bottom-[15%] text-[.55em] opacity-70">{climate.icon}</span>
-                  <span className="absolute -bottom-5 whitespace-nowrap rounded-full border border-white/70 bg-[#fffdf5]/92 px-2 py-0.5 text-[9px] font-bold text-[#274b42]">{climate.name}</span>
                 </div>
               );
             })}
+            {bursts.map(burst => <div key={burst.id} className="merge-burst" style={{ left: `${burst.x / gameWidth * 100}%`, top: `${burst.y / gameHeight * 100}%`, color: burst.color }}>
+              <span className="burst-ring" />
+              {Array.from({ length: 10 }, (_, index) => <i key={index} style={{ '--angle': `${index * 36}deg` } as React.CSSProperties} />)}
+              <b>{burst.earth ? "🌍 지구 완성! +10,000" : `${comboReward(burst.count).label} +${burst.earned.toLocaleString()}`}</b>
+            </div>)}
           </section>
+          </div>
+          <footer className="arcade-footer"><span>{activeGroup.chain.join(" → ")}</span><span>{combo > 0 ? comboReward(combo).label : "같은 공을 합쳐 지구를 만드세요"}</span></footer>
           <aside className="hidden">
             <p className="font-mono text-[10px] font-bold tracking-[.16em] text-[#668861]">NEXT CLIMATE</p>
             <div className="mx-auto mt-5 grid h-28 w-28 place-items-center rounded-full border-4 border-white text-4xl shadow-[0_7px_0_rgba(28,72,62,.16),0_12px_18px_rgba(28,72,62,.12)]" style={{ backgroundColor: nodeFor(nextKey).color }}>{nodeFor(nextKey).icon}</div>
@@ -761,7 +943,7 @@ function ClimateMerge() {
               <div className="mt-5 rounded-2xl border border-[#dce6d7] bg-[#f7faef] p-3 text-center">
                 <p className="text-xl">🌍</p>
                 <p className="mt-1 text-xs font-bold">A + B + C + D + E</p>
-                <p className="mt-1 text-[10px] text-[#657764]">지구 완성 보너스 · 100,000점</p>
+                <p className="mt-1 text-[10px] text-[#657764]">지구 완성 보너스 · 10,000점</p>
               </div>
             </div>
             <button
@@ -774,12 +956,15 @@ function ClimateMerge() {
             </button>
           </aside>
         </div>
+        {atlasOpen && <ClimateAtlas onClose={() => setAtlasOpen(false)} />}
+        <button type="button" className="help-launch" onClick={() => setHelpOpen(true)}>ⓘ 게임 설명</button>
+        {helpOpen && <ClimateHelp onClose={() => setHelpOpen(false)} />}
         {gameOver && (
-          <div className="fixed inset-0 z-50 grid place-items-center bg-[#17342f]/60 p-5 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-label="게임 오버" className="fixed inset-0 z-[100] grid place-items-center bg-[#17342f]/80 p-5 backdrop-blur-sm">
             <section className="w-full max-w-sm rounded-[28px] border border-white/30 bg-[#fffaf0] p-8 text-center shadow-2xl">
               <p className="font-mono text-[10px] font-bold tracking-[.2em] text-[#bd4f49]">BASKET OVERFLOW</p>
               <h2 className="mt-3 text-3xl font-black tracking-[-.05em]">게임 오버</h2>
-              <p className="mt-3 text-sm leading-relaxed text-[#647565]">기후 조각이 3D 바구니 상단을 넘었어요.<br />같은 조각을 합쳐 공간을 만들어 보세요.</p>
+              <p className="mt-3 text-sm leading-relaxed text-[#647565]">넘친 기후 공이 바구니 밖 바닥에 떨어졌어요.<br />같은 조각을 합쳐 공간을 만들어 보세요.</p>
               <p className="mt-6 font-mono text-sm font-bold">FINAL SCORE · {score}</p>
               <p className="mt-1 text-[11px] text-[#6e806d]">BEST · {highScoreRef.current}</p>
               <button onClick={resetGame} className="mt-6 w-full rounded-xl bg-[#17342f] py-3 text-sm font-bold text-white transition hover:bg-[#285346]">다시 시작하기</button>
