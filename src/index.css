@@ -341,3 +341,5 @@ body {
   .atlas-routes section:last-child { grid-column: span 2; }
   .atlas-launch { position: absolute; right: 0; bottom: 100%; width: auto; padding: 7px 12px; background: #fffaf0; border-radius: 12px 12px 0 0; border: 0; }
 }
+
+.rhythm-track canvas { touch-action: none; user-select: none; }
