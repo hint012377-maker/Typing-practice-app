@@ -1,5 +1,5 @@
 import { ChangeEvent, memo, PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createBrowserRouter, Link, RouterProvider } from "react-router-dom";
+import { createBrowserRouter, Link, RouterProvider } from "react-router";
 import Matter from "matter-js";
 import RhythmGame from "./RhythmGame";
 
@@ -131,7 +131,7 @@ function CountryTyping() {
   const [correct, setCorrect] = useState(0);
   const [errors, setErrors] = useState(0);
   const [matchedCharacters, setMatchedCharacters] = useState(0);
-  const [theme, setTheme] = useState(() => storedSetting("geo-typing-theme", "light") === "dark" ? "dark" : "light");
+  const [theme, setTheme] = useState(() => storedSetting("geo-typing-theme", "dark") === "dark" ? "dark" : "light");
   const [mapMode, setMapMode] = useState<"map" | "satellite">(() => storedSetting("geo-typing-map", "map") === "satellite" ? "satellite" : "map");
   const [inputEpoch, setInputEpoch] = useState(0);
   const composing = useRef(false);
@@ -384,62 +384,76 @@ function CountryTyping() {
 
 function Launcher() {
   return (
-    <main className="min-h-screen overflow-hidden bg-[#17342f] px-5 py-7 text-white sm:px-10 sm:py-10">
-      <div className="mx-auto max-w-6xl">
-        <header className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#e4f252] text-lg font-black text-[#17342f]">G</span>
-            <p className="text-lg font-bold tracking-tight">Geo Playroom</p>
-          </div>
-          <p className="font-mono text-[10px] tracking-[.18em] text-[#b6d3be]">LEARN BY PLAYING</p>
+    <main className="playroom-home">
+      <div className="home-container">
+        <header className="home-header">
+          <a href="#" className="home-wordmark" aria-label="Geo Playroom 홈">Geo<span>Playroom</span><sup>↗</sup></a>
+          <nav className="home-nav" aria-label="홈 탐색">
+            <a href="#games">게임 둘러보기</a>
+            <a href="#learn">학습 가이드</a>
+          </nav>
+          <span className="home-edition">2022 개정 교육과정</span>
         </header>
-        <section className="mt-12 max-w-3xl sm:mt-24">
-          <p className="font-mono text-xs tracking-[.18em] text-[#e4f252]">WORLD · WEATHER · WORDS</p>
-          <h1 className="mt-4 text-4xl font-bold leading-[.95] tracking-[-.06em] sm:text-7xl">
-            지도를 읽고,
-            <br />
-            기후를 놀다.
-          </h1>
-          <p className="mt-6 max-w-xl text-sm leading-relaxed text-[#bfd5c3] sm:text-base">
-            나라 이름을 손끝으로 익히고, 작은 기후 요소를 합쳐 거대한 날씨 현상을 만들어 보세요.
-          </p>
+        <section className="home-hero" aria-labelledby="home-title">
+          <div className="home-hero-copy">
+            <p className="home-eyebrow"><span /> A SMALL PLAYROOM. A BIG WORLD.</p>
+            <h1 id="home-title">세계 여행,<br /><span>플레이로 시작.</span></h1>
+            <p className="home-intro">외우는 세계에서, 경험하는 세계로.<br />나라를 입력하고, 기후를 합치고, 리듬을 타며<br className="home-desktop-break" /> 나만의 지리 감각을 키워보세요.</p>
+            <div className="home-hero-actions"><a href="#games" className="home-primary-link">나의 첫 게임 고르기 <span aria-hidden="true">↘</span></a><span className="home-quick-note">설치 없이, 바로 플레이</span></div>
+          </div>
+          <aside className="home-pass" aria-label="세 가지 세계 여행">
+            <div className="home-pass-top"><span>GEO / LEARNING PASS</span><span>OPEN TO EVERYONE ↗</span></div>
+            <div className="home-pass-heading"><p>호기심만 챙겨 오세요.</p><strong>WORLD<br />PLAY PASS<span>03</span></strong></div>
+            <div className="home-pass-routes">
+              <Link to="/typing" className="home-pass-route home-pass-type"><span>01</span><div><b>TYPE THE WORLD</b><small>지도에서 나라를 만나다</small></div><span aria-hidden="true">↗</span></Link>
+              <Link to="/climate" className="home-pass-route home-pass-climate"><span>02</span><div><b>MERGE THE CLIMATE</b><small>기후가 모여 지구가 되다</small></div><span aria-hidden="true">↗</span></Link>
+              <Link to="/rhythm" className="home-pass-route home-pass-rhythm"><span>03</span><div><b>FEEL THE RHYTHM</b><small>나라 이름에 박자를 더하다</small></div><span aria-hidden="true">↗</span></Link>
+            </div>
+            <div className="home-pass-bottom"><span>DESTINATION: YOUR WORLD</span><span>✦</span></div>
+          </aside>
         </section>
-        <section className="mt-10 grid gap-5 lg:grid-cols-3">
+        <section id="games" className="home-games-heading" aria-labelledby="games-title">
+          <div><p className="home-eyebrow">CHOOSE YOUR NEXT DESTINATION</p><h2 id="games-title">오늘은 어떤 세계로 떠날까요?</h2></div><span className="home-section-count">01 — 03 / GAMES</span>
+        </section>
+        <section className="game-selection home-game-grid grid gap-5 lg:grid-cols-3" aria-label="게임 선택">
           <Link
             to="/typing"
-            className="group relative min-h-[260px] overflow-hidden rounded-[28px] bg-[#dff3e3] p-7 text-[#17342f] transition hover:-translate-y-1 sm:min-h-[310px]"
+            className="game-card game-card--typing"
           >
-            <div className="absolute -right-12 -top-12 h-64 w-64 rounded-full bg-[#9ad5b0] opacity-70 transition group-hover:scale-110" />
-            <p className="relative font-mono text-xs font-bold tracking-widest text-[#3b9d44]">01 · COUNTRY TYPING</p>
-            <h2 className="relative mt-8 text-3xl font-bold tracking-[-.05em] sm:mt-10 sm:text-4xl">
+            <p className="game-card-label">01 · COUNTRY TYPING</p>
+            <h2 className="game-card-title">
               나라 이름
               <br />
               타자연습
             </h2>
-            <p className="relative mt-3 max-w-xs text-xs text-[#52725a] sm:text-sm">한글 또는 영어로, 지도 위 나라를 빠르게 익히는 연습.</p>
-            <span className="absolute bottom-7 right-7 grid h-12 w-12 place-items-center rounded-full bg-[#17342f] text-xl text-white transition group-hover:translate-x-1">
-              →
-            </span>
+            <p className="game-card-description">지도를 따라 세계 여행. 한글과 영어로 나라 이름을 손끝에 익혀요.</p>
+            <span className="game-card-arrow" aria-hidden="true">⌨︎ →</span>
           </Link>
           <Link
             to="/climate"
-            className="group relative min-h-[260px] overflow-hidden rounded-[28px] bg-[#f39b66] p-7 text-[#442116] transition hover:-translate-y-1 sm:min-h-[310px]"
+            className="game-card game-card--climate"
           >
-            <div className="absolute -bottom-20 -right-12 h-64 w-64 rounded-full bg-[#e9534b] opacity-80 transition group-hover:scale-110" />
-            <p className="relative font-mono text-xs font-bold tracking-widest text-[#793120]">02 · CLIMATE MERGE</p>
-            <h2 className="relative mt-8 text-3xl font-bold tracking-[-.05em] sm:mt-10 sm:text-4xl">기후 수박게임</h2>
-            <p className="relative mt-3 max-w-xs text-xs text-[#6f3527] sm:text-sm">쾨펜 기후대를 합치며, 지구의 다섯 기후 권역을 익혀 보세요.</p>
-            <span className="absolute bottom-7 right-7 grid h-12 w-12 place-items-center rounded-full bg-[#442116] text-xl text-white transition group-hover:translate-x-1">
-              ↓
-            </span>
+            <p className="game-card-label">02 · CLIMATE MERGE</p>
+            <h2 className="game-card-title">기후 수박게임</h2>
+            <p className="game-card-description">작은 기후에서 하나의 지구로. 같은 기후를 합치며 세계를 배워요.</p>
+            <span className="game-card-arrow" aria-hidden="true">☀︎ →</span>
           </Link>
-          <Link to="/rhythm" className="rhythm-launch group relative min-h-[260px] overflow-hidden rounded-[28px] p-7 transition hover:-translate-y-1 sm:min-h-[310px]">
-            <p className="relative font-mono text-xs font-bold tracking-widest">03 · COUNTRY RHYTHM</p>
-            <h2 className="relative mt-8 text-3xl font-bold tracking-[-.05em] sm:mt-10 sm:text-4xl">나라 리듬게임</h2>
-            <p className="relative mt-3 max-w-xs text-xs sm:text-sm">비트를 따라 세계 여행. 롱노트와 함께 손끝으로 연주해요.</p>
-            <span className="absolute bottom-7 right-7 text-3xl">♫ →</span>
+          <Link to="/rhythm" className="game-card">
+            <p className="game-card-label">03 · COUNTRY RHYTHM</p>
+            <h2 className="game-card-title">나라 리듬게임</h2>
+            <p className="game-card-description">비트를 따라 세계 여행. 롱노트와 함께 손끝으로 연주해요.</p>
+            <span className="game-card-arrow" aria-hidden="true">♫ →</span>
           </Link>
         </section>
+        <section id="learn" className="home-learning" aria-labelledby="learn-title">
+          <div className="home-learning-title"><p className="home-eyebrow">PLAY A LITTLE. LEARN A LOT.</p><h2 id="learn-title">게임 한 판이,<br />세계와 가까워지는 시간.</h2><p>2022 개정 「세계시민과 지리」 학습을<br />손끝으로 가볍게 시작해보세요.</p></div>
+          <div className="home-learning-steps">
+            <article><span>01 / OBSERVE</span><h3>보고, 위치를 익히고</h3><p>지도에서 나라의 위치를 확인하고 이름을 입력하며 세계의 공간을 익혀요.</p></article>
+            <article><span>02 / CONNECT</span><h3>합치고, 관계를 찾고</h3><p>기후 조각의 변화를 살펴보며 쾨펜 기후 분류를 놀이로 접해요.</p></article>
+            <article><span>03 / REPEAT</span><h3>반복하며, 친숙해지고</h3><p>나라 이름이 담긴 노트를 리듬에 맞춰 누르며 즐겁게 반복해요.</p></article>
+          </div>
+        </section>
+        <footer className="home-footer"><div className="home-footer-brand">Geo Playroom<span>세계를 배우는 작은 놀이방.</span></div><p>WORLD · WEATHER · WORDS</p><a href="#home-title">위로 돌아가기 ↑</a></footer>
       </div>
     </main>
   );
@@ -988,6 +1002,7 @@ const router = createBrowserRouter([
   { path: "/typing", element: <CountryTyping /> },
   { path: "/climate", element: <ClimateMerge /> },
   { path: "/rhythm", element: <RhythmGame countries={lesson} /> },
+  { path: "/explore", element: <RhythmGame countries={lesson} /> },
   { path: "*", element: <Launcher /> },
 ]);
 
