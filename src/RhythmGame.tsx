@@ -67,7 +67,8 @@ export default function RhythmGame({ countries }: { countries: RhythmCountry[] }
     if (musicRef.current) { musicRef.current.playbackRate = speed / 10; musicRef.current.muted = !sound; }
   }, [speed, sound]);
   const frameTimeRef = useRef(performance.now());
-  const game = useRef({ phase: "ready" as Phase, notes: makeChart(countries), time: 0, score: 0, combo: 0, best: 0, perfect: 0, good: 0, miss: 0, pressed: new Set<number>(), sources: new Map<string, number>(), sparks: [] as Spark[], flashes: [0, 0, 0, 0], judgment: "", judgmentAt: -10, lastBeat: -1, width: 640, height: 720 });
+  const [initialNotes] = useState(() => makeChart(countries));
+  const game = useRef({ phase: "ready" as Phase, notes: initialNotes, firstActive: 0, time: 0, score: 0, combo: 0, best: 0, perfect: 0, good: 0, miss: 0, pressed: new Set<number>(), sources: new Map<string, number>(), sparks: [] as Spark[], flashes: [0, 0, 0, 0], judgment: "", judgmentAt: -10, lastBeat: -1, width: 640, height: 720 });
   const sessionDuration = () => game.current.notes.at(-1) ? game.current.notes.at(-1)!.time + Math.max(3, game.current.notes.at(-1)!.duration + 0.5) : 1;
   const inputTime = () => game.current.phase === "playing" && musicRef.current && musicConfig.current.song ? musicRef.current.currentTime : game.current.time + (game.current.phase === "playing" ? Math.max(0, Math.min(0.08, (performance.now() - frameTimeRef.current) / 1000)) * settings.current.speed : 0);
 
@@ -121,7 +122,14 @@ export default function RhythmGame({ countries }: { countries: RhythmCountry[] }
     state.pressed.add(lane);
     setPressed(keys.map((_, index) => state.pressed.has(index)));
     const now = inputTime();
-    const candidate = state.notes.filter(note => note.lane === lane && note.state === "waiting" && Math.abs(note.time - now) <= timing.good * settings.current.speed).reduce<Note | undefined>((nearest, note) => !nearest || Math.abs(note.time - now) < Math.abs(nearest.time - now) ? note : nearest, undefined);
+    let candidate: Note | undefined;
+    const window = timing.good * settings.current.speed;
+    for (let index = state.firstActive; index < state.notes.length; index += 1) {
+      const note = state.notes[index];
+      if (note.time > now + window) break;
+      if (note.lane !== lane || note.state !== "waiting" || Math.abs(note.time - now) > window) continue;
+      if (!candidate || Math.abs(note.time - now) < Math.abs(candidate.time - now)) candidate = note;
+    }
     if (!candidate) return;
     const perfect = Math.abs(candidate.time - now) <= timing.perfect * settings.current.speed;
     candidate.state = candidate.duration ? "holding" : "done";
@@ -137,7 +145,9 @@ export default function RhythmGame({ countries }: { countries: RhythmCountry[] }
     if ([...state.sources.values()].includes(lane)) return;
     state.pressed.delete(lane);
     setPressed(keys.map((_, index) => state.pressed.has(index)));
-    for (const note of state.notes) {
+    for (let index = state.firstActive; index < state.notes.length; index += 1) {
+      const note = state.notes[index];
+      if (note.time > inputTime() + timing.good * settings.current.speed) break;
       if (note.lane !== lane || note.state !== "holding") continue;
       note.state = "done";
       const completed = inputTime() >= note.time + note.duration - timing.holdRelease * settings.current.speed;
@@ -159,7 +169,7 @@ export default function RhythmGame({ countries }: { countries: RhythmCountry[] }
       const config = musicConfig.current;
       const notes = makeChart(countries, config.bpm, config.offset, config.song?.duration);
       if (!notes.length) { setMusicError("곡이 너무 짧거나 첫 박자 위치가 너무 늦어요. 다른 곡 또는 시작 위치를 선택하세요."); return; }
-      Object.assign(state, { notes, time: 0, score: 0, combo: 0, best: 0, perfect: 0, good: 0, miss: 0, lastBeat: -1, judgment: "", sparks: [], flashes: [0, 0, 0, 0] });
+      Object.assign(state, { notes, firstActive: 0, time: 0, score: 0, combo: 0, best: 0, perfect: 0, good: 0, miss: 0, lastBeat: -1, judgment: "", sparks: [], flashes: [0, 0, 0, 0] });
       if (musicRef.current) musicRef.current.currentTime = 0;
       state.sources.clear();
       state.pressed.clear();
@@ -245,6 +255,8 @@ export default function RhythmGame({ countries }: { countries: RhythmCountry[] }
     const context = canvas.getContext("2d");
     if (!context) return;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const laneGradients = new Map<string, CanvasGradient>();
+    let idleSignature = "";
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
@@ -253,6 +265,8 @@ export default function RhythmGame({ countries }: { countries: RhythmCountry[] }
       game.current.width = rect.width;
       game.current.height = rect.height;
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      laneGradients.clear();
+      idleSignature = "";
     };
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
@@ -260,6 +274,7 @@ export default function RhythmGame({ countries }: { countries: RhythmCountry[] }
     let frame = 0;
     let previous = performance.now();
     let published = previous;
+    let rendered = 0;
     const draw = (now: number) => {
       const elapsed = Math.min((now - previous) / 1000, 0.08);
       previous = now;
@@ -280,28 +295,43 @@ export default function RhythmGame({ countries }: { countries: RhythmCountry[] }
           tone(currentBeat % 4 === 0 ? 110 : 220, 0.09, currentBeat % 4 === 0 ? 0.065 : 0.025, "triangle");
           if (currentBeat % 2 === 0) tone([261.63, 329.63, 392, 293.66][Math.floor(currentBeat / 8) % 4], 0.27, 0.025);
         }
-        for (const note of state.notes) {
+        for (let index = state.firstActive; index < state.notes.length; index += 1) {
+          const note = state.notes[index];
+          if (note.time > state.time + timing.good * settings.current.speed) break;
           if (note.state === "waiting" && state.time > note.time + timing.good * settings.current.speed) { note.state = "done"; judge(note.lane, "MISS"); }
           if (note.state === "holding") {
             if (!state.pressed.has(note.lane)) { note.state = "done"; judge(note.lane, "MISS"); }
             else if (state.time >= note.time + note.duration) { note.state = "done"; judge(note.lane, "PERFECT", true); }
           }
         }
+        while (state.firstActive < state.notes.length && state.notes[state.firstActive].state === "done") state.firstActive += 1;
         if (state.time >= sessionDuration() || musicRef.current?.ended) { state.phase = "finished"; musicRef.current?.pause(); setPhase("finished"); publish(); }
       }
+      if (now - rendered < 1000 / 60 - 0.5) { frame = requestAnimationFrame(draw); return; }
+      const signature = `${width}:${height}:${down}:${state.phase}:${settings.current.bindings.join(",")}:${[...state.pressed].join(",")}`;
+      const animating = state.sparks.length > 0 || state.flashes.some(flash => flash > 0) || now - state.judgmentAt < 750;
+      if (state.phase !== "playing" && !animating && idleSignature === signature) { frame = requestAnimationFrame(draw); return; }
+      const renderElapsed = Math.min((now - (rendered || now)) / 1000, 0.08);
+      rendered = now;
+      idleSignature = animating ? "" : signature;
       context.clearRect(0, 0, width, height);
       context.fillStyle = "#0d231f";
       context.fillRect(0, 0, width, height);
       for (let lane = 0; lane < 4; lane += 1) {
         const x = lane * laneWidth;
-        const glow = context.createLinearGradient(0, down ? height : 0, 0, down ? 0 : height);
-        glow.addColorStop(0, colors[lane] + (state.pressed.has(lane) ? "40" : "0c"));
-        glow.addColorStop(1, colors[lane] + "00");
+        const gradientKey = `${down}:${lane}:${state.pressed.has(lane)}`;
+        let glow = laneGradients.get(gradientKey);
+        if (!glow) {
+          glow = context.createLinearGradient(0, down ? height : 0, 0, down ? 0 : height);
+          glow.addColorStop(0, colors[lane] + (state.pressed.has(lane) ? "40" : "0c"));
+          glow.addColorStop(1, colors[lane] + "00");
+          laneGradients.set(gradientKey, glow);
+        }
         context.fillStyle = glow;
         context.fillRect(x, 0, laneWidth, height);
         context.strokeStyle = "#ffffff12";
         context.beginPath(); context.moveTo(x, 0); context.lineTo(x, height); context.stroke();
-        state.flashes[lane] = Math.max(0, state.flashes[lane] - elapsed * 2.8);
+        state.flashes[lane] = Math.max(0, state.flashes[lane] - renderElapsed * 2.8);
         if (state.flashes[lane] > 0) {
           context.save(); context.globalAlpha = state.flashes[lane] * 0.5;
           context.fillStyle = colors[lane]; context.fillRect(x, target - 5, laneWidth, 10);
@@ -316,7 +346,29 @@ export default function RhythmGame({ countries }: { countries: RhythmCountry[] }
       }
       context.strokeStyle = "#ebf7d5"; context.lineWidth = 2;
       context.beginPath(); context.moveTo(0, target); context.lineTo(width, target); context.stroke();
-      for (const note of state.notes) {
+      for (let lane = 0; lane < 4; lane += 1) {
+        const center = (lane + 0.5) * laneWidth;
+        const radius = Math.min(38, (laneWidth - 14) / 2);
+        const active = state.pressed.has(lane);
+        context.save();
+        context.fillStyle = "#0d231f";
+        context.beginPath(); context.arc(center, target, radius + 5, 0, Math.PI * 2); context.fill();
+        context.shadowColor = colors[lane]; context.shadowBlur = active && !reducedMotion ? 22 : 0;
+        context.fillStyle = colors[lane] + (active ? "45" : "10");
+        context.strokeStyle = colors[lane] + (active ? "ff" : "a0");
+        context.lineWidth = active ? 4 : 2;
+        context.beginPath(); context.arc(center, target, radius, 0, Math.PI * 2); context.fill(); context.stroke();
+        context.strokeStyle = colors[lane] + "35"; context.lineWidth = 1;
+        context.beginPath(); context.arc(center, target, Math.max(1, radius - 6), 0, Math.PI * 2); context.stroke();
+        context.shadowBlur = 0; context.fillStyle = colors[lane]; context.textAlign = "center";
+        context.font = '600 12px "JetBrains Mono", monospace';
+        context.fillText(keyLabel(settings.current.bindings[lane]), center, down ? target + radius + 16 : target - radius - 10);
+        context.restore();
+      }
+      const lookAhead = (down ? target + 40 : height - target + 40) / travel;
+      for (let index = state.firstActive; index < state.notes.length; index += 1) {
+        const note = state.notes[index];
+        if (note.time > state.time + lookAhead) break;
         if (note.state === "done") continue;
         const y = note.state === "holding" ? target : target + (down ? -1 : 1) * (note.time - state.time) * travel;
         const tail = target + (down ? -1 : 1) * (note.time + note.duration - state.time) * travel;
@@ -340,13 +392,19 @@ export default function RhythmGame({ countries }: { countries: RhythmCountry[] }
         context.font = '9px "JetBrains Mono", monospace';
         context.fillText(note.duration ? `${note.country.code} · HOLD` : note.country.code, x + noteWidth / 2, y + 13);
       }
-      state.sparks = state.sparks.filter(spark => spark.life > 0);
-      for (const spark of state.sparks) {
-        spark.x += spark.vx * elapsed; spark.y += spark.vy * elapsed; spark.vy += elapsed * 160; spark.life -= elapsed * 1.8;
+      let liveSparks = 0;
+      for (let index = 0; index < state.sparks.length; index += 1) {
+        const spark = state.sparks[index];
+        spark.life -= renderElapsed * 1.8;
+        if (spark.life <= 0) continue;
+        state.sparks[liveSparks] = spark;
+        liveSparks += 1;
+        spark.x += spark.vx * renderElapsed; spark.y += spark.vy * renderElapsed; spark.vy += renderElapsed * 160;
         if (reducedMotion) continue;
         context.globalAlpha = Math.max(0, spark.life); context.fillStyle = spark.color;
         context.fillRect(spark.x, spark.y, 3 + spark.life * 3, 3 + spark.life * 3);
       }
+      state.sparks.length = liveSparks;
       context.globalAlpha = 1;
       if (state.judgment && now - state.judgmentAt < 750) {
         context.save(); context.textAlign = "center"; context.fillStyle = state.judgment === "MISS" ? "#ff9e9e" : "#efffaa";
@@ -404,13 +462,13 @@ export default function RhythmGame({ countries }: { countries: RhythmCountry[] }
         </aside>
         <section className="rhythm-machine" aria-label="나라 리듬게임 플레이 영역">
           <div className="rhythm-machine-top"><span><i /> {phase === "playing" ? "ON AIR" : "READY TO PLAY"}</span><span>{game.current.notes.length} NOTES / 4 LANES</span></div>
-          <div className="rhythm-track"><canvas ref={canvasRef} aria-label={`나라 이름 노트. ${bindings.map(keyLabel).join(", ")} 또는 아래 터치 버튼으로 연주하세요.`} />
+          <div className="rhythm-track"><canvas ref={canvasRef} onPointerDown={event => { if (game.current.phase !== "playing") return; event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); const lane = Math.max(0, Math.min(3, Math.floor((event.clientX - rect.left) / rect.width * 4))); event.currentTarget.setPointerCapture(event.pointerId); press(lane, `track:${event.pointerId}`); }} onPointerUp={event => release(`track:${event.pointerId}`)} onPointerCancel={event => release(`track:${event.pointerId}`)} onLostPointerCapture={event => release(`track:${event.pointerId}`)} aria-label={`나라 이름 노트. ${bindings.map(keyLabel).join(", ")} 또는 아래 터치 버튼으로 연주하세요.`} />
             {phase !== "playing" && <div className="rhythm-overlay"><p>{phase === "finished" ? "SESSION COMPLETE" : phase === "paused" ? "TAKE A BREATH" : "YOUR WORLD, YOUR BEAT"}</p><h2>{phase === "finished" ? "멋진 여행이었어요!" : phase === "paused" ? "잠시 쉬어가기" : "준비됐나요?"}</h2><span>{phase === "finished" ? `${hud.score.toLocaleString()}점 · 정확도 ${accuracy}% · 최대 ${hud.best}콤보` : `${bindings.map(keyLabel).join(" · ")}로 비트를 맞춰요. 긴 노트는 꾹!`}</span><button onClick={start} disabled={musicLoading}>{phase === "finished" ? "↻ 다시 플레이" : phase === "paused" ? "▶ 이어서 플레이" : "▶ 리듬 시작"}</button><small>SPACE로 시작 / 일시정지</small></div>}
           </div>
           <div className="rhythm-pads">{bindings.map((code, lane) => <button key={lane} className={`rhythm-pad rhythm-lane-${lane} ${pressed[lane] ? "is-pressed" : ""}`} aria-label={`${keyLabel(code)} 레인 누르기. 롱노트는 길게 누르세요.`} onPointerDown={event => { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); press(lane, `pointer:${event.pointerId}`); }} onPointerUp={event => release(`pointer:${event.pointerId}`)} onPointerCancel={event => release(`pointer:${event.pointerId}`)} onLostPointerCapture={event => release(`pointer:${event.pointerId}`)}><span>{keyLabel(code)}</span><small>TAP / HOLD</small></button>)}</div>
           <div className="rhythm-transport"><span>{Math.round(hud.progress * 100)}% <i>WORLD TOUR</i></span><button onClick={phase === "playing" ? pause : start}>{phase === "playing" ? "Ⅱ 일시정지" : phase === "paused" ? "▶ 이어하기" : "▶ 시작"}</button></div><div className="rhythm-progress"><span style={{ width: `${hud.progress * 100}%` }} /></div>
         </section>
-        <aside className="rhythm-results"><section className="rhythm-score"><p className="rhythm-eyebrow">LIVE SCORE</p><strong>{hud.score.toLocaleString().padStart(6, "0")}</strong><div><span>정확도 <b>{accuracy}%</b></span><span>최대 콤보 <b>{hud.best}</b></span></div></section><section className="rhythm-combo"><span>CURRENT COMBO</span><strong>{hud.combo.toString().padStart(2, "0")}</strong><p>한 박자씩, 더 멀리.</p></section><div className="rhythm-judgments"><p><span>✦ PERFECT</span><b>{hud.perfect}</b></p><p><span>◆ GOOD</span><b>{hud.good}</b></p><p><span>· MISS</span><b>{hud.miss}</b></p></div><section className="rhythm-how"><h2>손끝으로 떠나는 여행</h2><p><b>짧은 노트</b> 판정선에 닿으면 톡!</p><p><b>롱노트</b> 끝까지 누르고 있어요.</p><p><b>모바일</b> 아래 네 패드를 터치해요.</p><span>♪ 비트와 타격음이 함께 재생됩니다.</span></section></aside>
+        <aside className="rhythm-results"><section className="rhythm-score"><p className="rhythm-eyebrow">LIVE SCORE</p><strong>{hud.score.toLocaleString().padStart(6, "0")}</strong><div><span>정확도 <b>{accuracy}%</b></span><span>최대 콤보 <b>{hud.best}</b></span></div></section><section className="rhythm-combo"><span>CURRENT COMBO</span><strong>{hud.combo.toString().padStart(2, "0")}</strong><p>한 박자씩, 더 멀리.</p></section><div className="rhythm-judgments"><p><span>✦ PERFECT</span><b>{hud.perfect}</b></p><p><span>◆ GOOD</span><b>{hud.good}</b></p><p><span>· MISS</span><b>{hud.miss}</b></p></div><section className="rhythm-how"><h2>손끝으로 떠나는 여행</h2><p><b>짧은 노트</b> 판정선에 닿으면 톡!</p><p><b>롱노트</b> 끝까지 누르고 있어요.</p><p><b>모바일</b> 판정 링이 있는 레인이나 아래 패드를 터치해요.</p><span>♪ 비트와 타격음이 함께 재생됩니다.</span></section></aside>
       </div><footer className="rhythm-footer"><span>COUNTRIES FROM COUNTRY TYPING</span><span>작은 타이밍이 만드는 큰 즐거움.</span></footer>
     </main>
   );
