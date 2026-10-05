@@ -1,7 +1,10 @@
-import { ChangeEvent, memo, PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, lazy, memo, PointerEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserRouter, Link, RouterProvider } from "react-router";
 import Matter from "matter-js";
-import RhythmGame from "./RhythmGame";
+import { additionalCountries, countryDataAttribution } from "./countries";
+
+const RhythmGame = lazy(() => import("./RhythmGame"));
+const rhythmLoading = <div role="status" className="grid min-h-screen place-items-center bg-[#17342f] text-white">리듬게임 준비 중…</div>;
 
 type Country = { code: string; korean: string; english: string; lat: number; lng: number; zoom: number };
 
@@ -61,6 +64,21 @@ const lesson: Country[] = [
   { code: "PHL", korean: "필리핀", english: "Philippines", lat: 12.88, lng: 121.77, zoom: 5 },
 ];
 
+const typingLesson: Country[] = [...lesson, ...additionalCountries];
+
+function shuffleCountries(previousLast?: string): Country[] {
+  const shuffled = [...typingLesson];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[randomIndex]] = [shuffled[randomIndex], shuffled[index]];
+  }
+  if (shuffled.length > 1 && shuffled[0].code === previousLast) {
+    const swapIndex = 1 + Math.floor(Math.random() * (shuffled.length - 1));
+    [shuffled[0], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[0]];
+  }
+  return shuffled;
+}
+
 function storedSetting(key: string, fallback: string) {
   try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
 }
@@ -82,48 +100,52 @@ const mapUrl = (country: Country, isFixed: boolean, mapMode: "map" | "satellite"
   return `https://maps.google.com/maps?q=${country.lat},${country.lng}&z=${zoom}&t=${mapMode === "satellite" ? "k" : "m"}&output=embed&hl=ko`;
 };
 
-const MapFrames = memo(function MapFrames({
-  index,
-  loaded,
-  onLoaded,
-  isFixedMap,
-  mapMode,
-}: {
-  index: number;
-  loaded: Record<string, boolean>;
-  onLoaded: (code: string) => void;
+const CountryMapFrame = memo(function CountryMapFrame({ country, active, isFixedMap, mapMode }: {
+  country: Country;
+  active: boolean;
   isFixedMap: boolean;
   mapMode: "map" | "satellite";
 }) {
-  const visibleCountries = [lesson[index], lesson[(index + 1) % lesson.length]];
-  const current = lesson[index];
+  const [loaded, setLoaded] = useState(false);
+  return <>
+    <iframe src={mapUrl(country, isFixedMap, mapMode)} title={`${country.korean} 위치 지도`} onLoad={() => setLoaded(true)} aria-hidden={!active} tabIndex={active ? 0 : -1} className={`absolute inset-0 h-full w-full border-0 transition-opacity duration-300 ease-out ${active ? "z-10 opacity-100" : "pointer-events-none z-0 opacity-0"}`} loading="eager" />
+    {active && !loaded && <div className="pointer-events-none absolute left-1/2 top-5 z-20 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-semibold text-[#5d6e5f] shadow-sm">지도 불러오는 중</div>}
+  </>;
+});
+
+const MapFrames = memo(function MapFrames({
+  current,
+  next,
+  isFixedMap,
+  mapMode,
+}: {
+  current: Country;
+  next: Country;
+  isFixedMap: boolean;
+  mapMode: "map" | "satellite";
+}) {
+  const visibleCountries = [current, next];
   return (
     <>
       {visibleCountries.map((country) => (
-        <iframe
+        <CountryMapFrame
           key={`${country.code}-${isFixedMap}-${mapMode}`}
-          src={mapUrl(country, isFixedMap, mapMode)}
-          title={`${country.korean} 위치 지도`}
-          onLoad={() => onLoaded(`${country.code}-${isFixedMap}-${mapMode}`)}
-          aria-hidden={country.code !== current.code}
-          tabIndex={country.code === current.code ? 0 : -1}
-          className={`absolute inset-0 h-full w-full border-0 transition-opacity duration-300 ease-out ${
-            country.code === current.code ? "z-10 opacity-100" : "pointer-events-none z-0 opacity-0"
-          }`}
-          loading="eager"
+          country={country}
+          active={country.code === current.code}
+          isFixedMap={isFixedMap}
+          mapMode={mapMode}
         />
       ))}
-      {!loaded[`${current.code}-${isFixedMap}-${mapMode}`] && (
-        <div className="pointer-events-none absolute left-1/2 top-5 z-20 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-semibold text-[#5d6e5f] shadow-sm">
-          지도 불러오는 중
-        </div>
-      )}
     </>
   );
 });
 
 function CountryTyping() {
-  const [index, setIndex] = useState(0);
+  const [session, setSession] = useState(() => {
+    const order = shuffleCountries();
+    return { order, upcoming: shuffleCountries(order.at(-1)!.code), index: 0 };
+  });
+  const index = session.index;
   const [isFixedMap, setIsFixedMap] = useState(true);
   const [language, setLanguage] = useState<"ko" | "en">("ko");
   const [displayInput, setDisplayInput] = useState("");
@@ -136,11 +158,11 @@ function CountryTyping() {
   const [inputEpoch, setInputEpoch] = useState(0);
   const composing = useRef(false);
   const committedInput = useRef("");
-  const [loaded, setLoaded] = useState<Record<string, boolean>>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const advancing = useRef(false);
   const audioContext = useRef<AudioContext | null>(null);
-  const current = lesson[index];
+  const current = session.order[index];
+  const next = index + 1 < session.order.length ? session.order[index + 1] : session.upcoming[0];
   const target = language === "ko" ? current.korean : current.english;
   useEffect(() => {
     try { localStorage.setItem("geo-typing-theme", theme); localStorage.setItem("geo-typing-map", mapMode); } catch {}
@@ -167,12 +189,7 @@ function CountryTyping() {
 
   useEffect(() => {
     resetInput();
-  }, [index, language, resetInput]);
-
-  const markLoaded = useCallback(
-    (code: string) => setLoaded((value) => (value[code] ? value : { ...value, [code]: true })),
-    []
-  );
+  }, [current.code, language, resetInput]);
 
   const getAudio = () => {
     if (!audioContext.current) audioContext.current = new AudioContext();
@@ -226,7 +243,9 @@ function CountryTyping() {
     advancing.current = true;
     playSuccessSound();
     setCorrect((value) => value + 1);
-    setIndex((value) => (value + 1) % lesson.length);
+    setSession(value => value.index + 1 < value.order.length
+      ? { ...value, index: value.index + 1 }
+      : { order: value.upcoming, upcoming: shuffleCountries(value.upcoming.at(-1)!.code), index: 0 });
   };
 
   const commitInput = (value: string) => {
@@ -276,12 +295,12 @@ function CountryTyping() {
         <div className="typing-progress flex items-center justify-between px-5 py-3 sm:px-10">
           <p className="text-sm font-semibold text-[#3b9d44]">
             {String(index + 1).padStart(2, "0")}{" "}
-            <span className="font-normal text-[#95a295]">/ {String(lesson.length).padStart(2, "0")} 국가</span>
+            <span className="font-normal text-[#95a295]">/ {typingLesson.length} 국가·지역 · 무작위</span>
           </p>
           <p className="text-xs text-[#748174]">입력창을 터치하여 키보드를 여세요.</p>
         </div>
         <div className="typing-map relative z-0 h-[35vh] min-h-[220px] shrink-0 overflow-hidden sm:h-[48vh] sm:min-h-[340px]">
-          <MapFrames index={index} loaded={loaded} onLoaded={markLoaded} isFixedMap={isFixedMap} mapMode={mapMode} />
+          <MapFrames current={current} next={next} isFixedMap={isFixedMap} mapMode={mapMode} />
           <div className="map-mode" role="group" aria-label="지도 보기 방식"><button type="button" aria-pressed={mapMode === "map"} onClick={() => setMapMode("map")}>◎ 지도</button><button type="button" aria-pressed={mapMode === "satellite"} onClick={() => setMapMode("satellite")}>◈ 위성</button><span>{current.code} · {current.lat.toFixed(1)}° / {current.lng.toFixed(1)}°</span></div>
           <div className="pointer-events-none absolute bottom-5 left-1/2 z-30 hidden -translate-x-1/2 rounded-full bg-white/95 px-5 py-2 text-[11px] font-semibold text-[#5d6e5f] shadow-lg sm:block">
             지도에서 나라의 윤곽과 주변 지역을 살펴보세요
@@ -374,7 +393,7 @@ function CountryTyping() {
                 spellCheck={false}
               />
             </div>
-            <p className="typing-caption">한글은 조합이 끝난 글자만 채점해요 · 정확도는 글자 단위 · 지도 모드는 다음 나라에도 유지돼요</p>
+            <p className="typing-caption">{typingLesson.length}개 국가·지역을 한 바퀴 동안 중복 없이 무작위로 연습해요 · 지도 모드는 유지돼요<br />한글은 조합이 끝난 글자만 채점해요 · <a href={countryDataAttribution.source} target="_blank" rel="noreferrer">국가 데이터: mledoze/countries</a> · <a href={countryDataAttribution.license} target="_blank" rel="noreferrer">ODbL</a></p>
           </div>
         </div>
       </section>
@@ -641,11 +660,13 @@ function ClimateMerge() {
     const now = performance.now();
     if (!force && now - lastSyncRef.current < 1000 / 60) return;
     lastSyncRef.current = now;
-    setPieces(
-      Matter.Composite.allBodies(engine.world)
+    const nextPieces = Matter.Composite.allBodies(engine.world)
         .filter((body): body is ClimateBody => !body.isStatic && Boolean((body as ClimateBody).climateKey))
-        .map((body) => ({ id: body.id, key: body.climateKey!, parts: body.climateParts ?? [], x: body.position.x, y: body.position.y, angle: body.angle }))
-    );
+        .map((body) => ({ id: body.id, key: body.climateKey!, parts: body.climateParts ?? [], x: body.position.x, y: body.position.y, angle: body.angle }));
+    setPieces(previous => !force && previous.length === nextPieces.length && previous.every((piece, index) => {
+      const next = nextPieces[index];
+      return piece.id === next.id && piece.key === next.key && Math.abs(piece.x - next.x) < 0.03 && Math.abs(piece.y - next.y) < 0.03 && Math.abs(piece.angle - next.angle) < 0.002;
+    }) ? previous : nextPieces);
   }, []);
 
   const makeClimateBody = useCallback((x: number, y: number, key: string, parts: Primary[] = []) => {
@@ -733,8 +754,10 @@ function ClimateMerge() {
           const a = climateBodies[index];
           const b = climateBodies[other];
           if (a.popped || b.popped) continue;
-          const distance = Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y);
-          if (distance <= (a.circleRadius ?? 0) + (b.circleRadius ?? 0) + 0.6) {
+          const horizontal = a.position.x - b.position.x;
+          const vertical = a.position.y - b.position.y;
+          const contactDistance = (a.circleRadius ?? 0) + (b.circleRadius ?? 0) + 0.6;
+          if (horizontal * horizontal + vertical * vertical <= contactDistance * contactDistance) {
             onCollision({ pairs: [{ bodyA: a, bodyB: b }] } as unknown as Matter.IEventCollision<Matter.Engine>);
           }
         }
@@ -1001,8 +1024,8 @@ const router = createBrowserRouter([
   { path: "/", element: <Launcher /> },
   { path: "/typing", element: <CountryTyping /> },
   { path: "/climate", element: <ClimateMerge /> },
-  { path: "/rhythm", element: <RhythmGame countries={lesson} /> },
-  { path: "/explore", element: <RhythmGame countries={lesson} /> },
+  { path: "/rhythm", element: <Suspense fallback={rhythmLoading}><RhythmGame countries={typingLesson} /></Suspense> },
+  { path: "/explore", element: <Suspense fallback={rhythmLoading}><RhythmGame countries={lesson} /></Suspense> },
   { path: "*", element: <Launcher /> },
 ]);
 
