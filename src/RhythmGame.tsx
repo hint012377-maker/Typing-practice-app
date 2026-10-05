@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { createRhythmSong, rhythmSongs, type RhythmSong } from "./rhythmSongs";
+import { rhythmSongs, type RhythmSong } from "./rhythmSongs";
 
 type RhythmCountry = { code: string; korean: string; english: string };
 type Note = { id: number; lane: number; time: number; duration: number; country: RhythmCountry; state: "waiting" | "holding" | "done" };
@@ -22,17 +22,30 @@ function loadBindings(): string[] {
 }
 
 function makeChart(countries: RhythmCountry[], bpm = 100, offset = 0, songDuration?: number): Note[] {
+  if (!countries.length) return [];
   const beat = 60 / bpm;
   const first = songDuration ? offset + Math.ceil(Math.max(0, 3 - offset) / beat) * beat : 3;
   const available = [0, 0, 0, 0];
   const count = songDuration ? Math.min(1000, Math.max(0, Math.floor((songDuration - first - beat * 2 - 0.5) / beat) + 1)) : 64;
+  let order: RhythmCountry[] = [];
+  let previousCode: string | undefined;
   return Array.from({ length: count }, (_, id) => {
+    if (id % countries.length === 0) {
+      order = [...countries];
+      for (let index = order.length - 1; index > 0; index -= 1) {
+        const swap = Math.floor(Math.random() * (index + 1));
+        [order[index], order[swap]] = [order[swap], order[index]];
+      }
+      if (order.length > 1 && order[0].code === previousCode) [order[0], order[1]] = [order[1], order[0]];
+    }
     const time = first + id * beat;
     let lane = (id * 7 + Math.floor(id / 4)) % 4;
     while (available[lane] > time) lane = (lane + 1) % 4;
     const duration = id % 7 === 4 ? beat * 2 : 0;
     available[lane] = time + duration + beat * 0.5;
-    return { id, lane, time, duration, country: countries[id % countries.length], state: "waiting" };
+    const country = order[id % countries.length];
+    previousCode = country.code;
+    return { id, lane, time, duration, country, state: "waiting" };
   });
 }
 
@@ -48,6 +61,9 @@ export default function RhythmGame({ countries }: { countries: RhythmCountry[] }
   const [musicError, setMusicError] = useState("");
   const [selectedTrack, setSelectedTrack] = useState<string | null>(null);
   const songCache = useRef(new Map<string, File>());
+  const songWorker = useRef<Worker | null>(null);
+  const songRequest = useRef(0);
+  useEffect(() => () => { songRequest.current += 1; songWorker.current?.terminate(); songWorker.current = null; }, []);
   const musicConfig = useRef({ bpm, offset, song, loading: musicLoading });
   musicConfig.current = { bpm, offset, song, loading: musicLoading };
   const [phase, setPhase] = useState<Phase>("ready");
@@ -206,6 +222,7 @@ export default function RhythmGame({ countries }: { countries: RhythmCountry[] }
   };
 
   const clearMusic = () => {
+    songRequest.current += 1;
     resetSongSession();
     const music = musicRef.current;
     if (music) { music.onloadedmetadata = null; music.onerror = null; music.removeAttribute("src"); music.load(); }
@@ -237,13 +254,38 @@ export default function RhythmGame({ countries }: { countries: RhythmCountry[] }
   };
 
   const selectBuiltin = (track: RhythmSong) => {
-    try {
-      const file = songCache.current.get(track.id) ?? createRhythmSong(track);
+    clearMusic();
+    setBpm(track.bpm);
+    setOffset(0);
+    const cached = songCache.current.get(track.id);
+    if (cached) { selectMusic(cached, track.id); return; }
+    setMusicLoading(true);
+    const request = ++songRequest.current;
+    const acceptSong = (file: File) => {
+      if (songRequest.current !== request) return;
       songCache.current.set(track.id, file);
-      setBpm(track.bpm);
-      setOffset(0);
       selectMusic(file, track.id);
-    } catch { setMusicError("기본곡을 준비하지 못했어요. 다시 선택하거나 음악 파일을 사용해 주세요."); }
+    };
+    try {
+      if (typeof Worker === "undefined") {
+        void import("./rhythmSongs").then(module => {
+          if (songRequest.current === request) acceptSong(module.createRhythmSong(track));
+        }).catch(() => { if (songRequest.current === request) { setMusicLoading(false); setMusicError("기본곡을 준비하지 못했어요. 음악 파일을 사용해 주세요."); } });
+        return;
+      }
+      const worker = songWorker.current ?? new Worker(new URL("./rhythmSongWorker.ts", import.meta.url), { type: "module" });
+      songWorker.current = worker;
+      worker.onmessage = (event: MessageEvent<{ request: number; file?: File; error?: string }>) => {
+        if (event.data.request !== request || songRequest.current !== request) return;
+        if (event.data.file) acceptSong(event.data.file);
+        else { setMusicLoading(false); setMusicError("기본곡을 준비하지 못했어요. 다시 선택하거나 음악 파일을 사용해 주세요."); }
+      };
+      worker.onerror = () => {
+        worker.terminate(); songWorker.current = null;
+        if (songRequest.current === request) { setMusicLoading(false); setMusicError("기본곡을 준비하지 못했어요. 다시 선택해 주세요."); }
+      };
+      worker.postMessage({ request, trackId: track.id });
+    } catch { setMusicLoading(false); setMusicError("기본곡을 준비하지 못했어요. 음악 파일을 사용해 주세요."); }
   };
 
   const actions = useRef({ press, release, pause, start });
@@ -256,21 +298,27 @@ export default function RhythmGame({ countries }: { countries: RhythmCountry[] }
     if (!context) return;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const laneGradients = new Map<string, CanvasGradient>();
+    const noteSprites = new Map<string, HTMLCanvasElement>();
+    let pixelRatio = 1;
     let idleSignature = "";
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      pixelRatio = ratio;
       canvas.width = Math.round(rect.width * ratio);
       canvas.height = Math.round(rect.height * ratio);
       game.current.width = rect.width;
       game.current.height = rect.height;
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
       laneGradients.clear();
+      noteSprites.clear();
       idleSignature = "";
     };
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
     resize();
+    const refreshFonts = () => { noteSprites.clear(); idleSignature = ""; };
+    document.fonts.addEventListener("loadingdone", refreshFonts);
     let frame = 0;
     let previous = performance.now();
     let published = previous;
@@ -382,15 +430,30 @@ export default function RhythmGame({ countries }: { countries: RhythmCountry[] }
           context.strokeStyle = colors[note.lane]; context.lineWidth = 2;
           context.strokeRect(x + noteWidth * 0.2, Math.min(y, tail), noteWidth * 0.6, Math.max(0, Math.abs(tail - y)));
         }
-        context.save(); context.shadowColor = colors[note.lane]; context.shadowBlur = note.state === "holding" ? 24 : 10;
-        context.fillStyle = colors[note.lane]; context.beginPath(); context.arc(x + radius, y, radius, 0, Math.PI * 2); context.fill();
-        context.strokeStyle = "#ffffffa0"; context.lineWidth = 2; context.stroke();
-        context.fillStyle = "#ffffff45"; context.beginPath(); context.ellipse(x + radius * 0.65, y - radius * 0.48, radius * 0.32, radius * 0.16, -0.5, 0, Math.PI * 2); context.fill(); context.restore();
-        context.fillStyle = "#122d25"; context.textAlign = "center";
-        context.font = `700 ${Math.max(9, Math.min(14, (noteWidth - 8) / note.country.korean.length))}px "IBM Plex Sans KR", sans-serif`;
-        context.fillText(note.country.korean, x + noteWidth / 2, y - 1, noteWidth - 8);
-        context.font = '9px "JetBrains Mono", monospace';
-        context.fillText(note.duration ? `${note.country.code} · HOLD` : note.country.code, x + noteWidth / 2, y + 13);
+        const spriteKey = `${note.country.code}:${note.lane}:${radius}:${Boolean(note.duration)}:${note.state === "holding"}`;
+        let sprite = noteSprites.get(spriteKey);
+        const padding = 28;
+        const extent = noteWidth + padding * 2;
+        if (!sprite) {
+          sprite = document.createElement("canvas");
+          sprite.width = sprite.height = Math.ceil(extent * pixelRatio);
+          const paint = sprite.getContext("2d");
+          if (!paint) continue;
+          paint.scale(pixelRatio, pixelRatio);
+          const center = radius + padding;
+          paint.save(); paint.shadowColor = colors[note.lane]; paint.shadowBlur = note.state === "holding" ? 24 : 10;
+          paint.fillStyle = colors[note.lane]; paint.beginPath(); paint.arc(center, center, radius, 0, Math.PI * 2); paint.fill();
+          paint.strokeStyle = "#ffffffa0"; paint.lineWidth = 2; paint.stroke();
+          paint.fillStyle = "#ffffff45"; paint.beginPath(); paint.ellipse(center - radius * 0.35, center - radius * 0.48, radius * 0.32, radius * 0.16, -0.5, 0, Math.PI * 2); paint.fill(); paint.restore();
+          paint.fillStyle = "#122d25"; paint.textAlign = "center";
+          paint.font = `700 ${Math.max(9, Math.min(14, (noteWidth - 8) / note.country.korean.length))}px "IBM Plex Sans KR", sans-serif`;
+          paint.fillText(note.country.korean, center, center - 1, noteWidth - 8);
+          paint.font = '9px "JetBrains Mono", monospace';
+          paint.fillText(note.duration ? `${note.country.code} · HOLD` : note.country.code, center, center + 13);
+          if (noteSprites.size >= 48) noteSprites.delete(noteSprites.keys().next().value!);
+          noteSprites.set(spriteKey, sprite);
+        }
+        context.drawImage(sprite, x - padding, y - radius - padding, extent, extent);
       }
       let liveSparks = 0;
       for (let index = 0; index < state.sparks.length; index += 1) {
@@ -444,7 +507,7 @@ export default function RhythmGame({ countries }: { countries: RhythmCountry[] }
     const blur = () => { actions.current.pause(); game.current.sources.clear(); game.current.pressed.clear(); setPressed([false, false, false, false]); };
     const visibility = () => { if (document.hidden) blur(); };
     window.addEventListener("keydown", keyDown); window.addEventListener("keyup", keyUp); window.addEventListener("blur", blur); document.addEventListener("visibilitychange", visibility);
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); window.removeEventListener("keydown", keyDown); window.removeEventListener("keyup", keyUp); window.removeEventListener("blur", blur); document.removeEventListener("visibilitychange", visibility); if (musicRef.current) { musicRef.current.pause(); musicRef.current.onloadedmetadata = null; musicRef.current.onerror = null; musicRef.current.removeAttribute("src"); musicRef.current.load(); } if (musicUrlRef.current) URL.revokeObjectURL(musicUrlRef.current); void audioRef.current?.close(); audioRef.current = null; };
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); document.fonts.removeEventListener("loadingdone", refreshFonts); noteSprites.clear(); laneGradients.clear(); window.removeEventListener("keydown", keyDown); window.removeEventListener("keyup", keyUp); window.removeEventListener("blur", blur); document.removeEventListener("visibilitychange", visibility); if (musicRef.current) { musicRef.current.pause(); musicRef.current.onloadedmetadata = null; musicRef.current.onerror = null; musicRef.current.removeAttribute("src"); musicRef.current.load(); } if (musicUrlRef.current) URL.revokeObjectURL(musicUrlRef.current); void audioRef.current?.close(); audioRef.current = null; };
   }, []);
 
   const accuracy = hud.perfect + hud.good + hud.miss ? Math.round((hud.perfect + hud.good * 0.5) / (hud.perfect + hud.good + hud.miss) * 100) : 100;
