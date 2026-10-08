@@ -1,5 +1,5 @@
 import { ChangeEvent, lazy, memo, PointerEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createBrowserRouter, Link, RouterProvider } from "react-router";
+import { createHashRouter, Link, RouterProvider } from "react-router";
 import Matter from "matter-js";
 import { additionalCountries, countryDataAttribution } from "./countries";
 
@@ -1020,7 +1020,7 @@ function ClimateMerge() {
   );
 }
 
-const router = createBrowserRouter([
+const router = createHashRouter([
   { path: "/", element: <Launcher /> },
   { path: "/typing", element: <CountryTyping /> },
   { path: "/climate", element: <ClimateMerge /> },
