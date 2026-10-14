@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { formatDuration, topRankings, type RankingEntry as Entry } from "./rankingRules";
 import { projectId, publicAnonKey } from "./utils/supabase/info";
 
-// 프로젝트 설정값 연결 (환경변수 실패 시 info.tsx 직접 참조)
 const url = `https://${projectId}.supabase.co`;
 const apiKey = publicAnonKey;
 const shared = Boolean(projectId && apiKey);
