@@ -82,7 +82,8 @@ export default function Rankings({ recordId, game, score, durationMs, accuracy =
   return <dialog ref={dialog} onCancel={onClose} className="ranking-dialog" aria-labelledby="ranking-title">
     <header><div><p>GEO PLAYROOM · RANKINGS</p><h2 id="ranking-title">{game === "climate" ? "기후게임" : `타자연습 · ${game === "typing-ko" ? "한국어" : "English"}`} 랭킹</h2></div><button type="button" onClick={onClose}>닫기 ×</button></header>
     <p className="rank-description">{shared
-      ? "전체 사용자 공유 랭킹 · 같은 배포 링크로 접속한 학생들의 기록을 함께 표시해요."}</p>
+      ? "전체 사용자 공유 랭킹 · 같은 배포 링크로 접속한 학생들의 기록을 함께 표시해요."
+      : "공유 랭킹 설정 전 · 현재는 이 브라우저에만 저장돼요. 제가 Supabase와 GitHub 배포 환경 변수를 설정해야하는데 아직 적용을 못했습니다."}</p>
     <p className="rank-description">{game === "climate" ? "게임 오버 후 최종 점수로 상위 100개 기록을 표시해요." : "197개국 완주 시간이 짧은 순서로 TOP 100을 표시해요. 동점은 정확도 순, 한국어·영어는 별도 랭킹이에요."}</p>
     <button type="button" disabled={loading || busy} onClick={() => { setMessage(""); void load().catch(error => setMessage(error.message)); }}>랭킹 새로고침</button>
     {score !== undefined && <form onSubmit={event => { event.preventDefault(); void submit(); }} className="rank-register">
