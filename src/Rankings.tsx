@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { formatDuration, topRankings, type RankingEntry as Entry } from "./rankingRules";
 import { projectId, publicAnonKey } from "./utils/supabase/info";
 
-// 프로젝트 ID와 Anon Key로 Supabase REST URL 및 Key 설정
+// info.tsx에 설정된 projectId와 publicAnonKey 사용
 const url = `https://${projectId}.supabase.co`;
 const apiKey = publicAnonKey;
 const shared = Boolean(projectId && apiKey);
@@ -73,7 +73,6 @@ export default function Rankings({ recordId, game, score, durationMs, accuracy =
     if (!name || Array.from(name).length > 16) { setMessage("닉네임을 1~16자로 입력해주세요."); return; }
     setBusy(true); setMessage("");
 
-    // UUID 및 수치형 데이터 포함
     const entry: Entry = {
       id: recordId || crypto.randomUUID(),
       nickname: name,
