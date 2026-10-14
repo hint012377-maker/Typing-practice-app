@@ -107,22 +107,62 @@ export default function Rankings({ recordId, game, score, durationMs, accuracy =
     }
   };
 
-  return <dialog ref={dialog} onCancel={onClose} className="ranking-dialog" aria-labelledby="ranking-title">
-    <header><div><p>GEO PLAYROOM · RANKINGS</p><h2 id="ranking-title">{game === "climate" ? "기후게임" : `타자연습 · ${game === "typing-ko" ? "한국어" : "English"}`} 랭킹</h2></div><button type="button" onClick={onClose}>닫기 ×</button></header>
-    <p className="rank-description">{shared
-      ? "전체 사용자 공유 랭킹 · 같은 배포 링크로 접속한 학생들의 기록을 함께 표시해요."
-      : "공유 랭킹 설정 전 · 현재는 이 브라우저에만 저장돼요."}</p>
-    <p className="rank-description">{game === "climate" ? "게임 오버 후 최종 점수로 상위 100개 기록을 표시해요." : "197개국 완주 시간이 짧은 순서로 TOP 100을 표시해요. 동점은 정확도 순, 한국어·영어는 별도 랭킹이에요."}</p>
-    <button type="button" disabled={loading || busy} onClick={() => { setMessage(""); void load().catch(error => setMessage(error.message)); }}>랭킹 새로고침</button>
-    {score !== undefined && <form onSubmit={event => { event.preventDefault(); void submit(); }} className="rank-register">
-      <label htmlFor="rank-nickname">닉네임 <span>실명 대신 별명을 사용하세요</span></label>
-      <input id="rank-nickname" value={nickname} maxLength={16} onChange={event => setNickname(event.target.value)} placeholder="여행자 이름" autoComplete="nickname" disabled={busy || submitted} />
-      <button type="submit" disabled={busy || submitted || score <= 0}>{submitted ? "등록 완료" : busy ? "등록 중…" : `${game === "climate" ? `${score.toLocaleString()}점` : formatDuration(durationMs!)} 기록 등록`}</button>
-    </form>}
-    <p role="status" className="rank-message">{message}</p>
-    <div className="rank-table-scroll" aria-busy={loading}><table><thead><tr><th>순위</th><th>닉네임</th><th>{game === "climate" ? "점수" : "완주 시간"}</th>{game !== "climate" && <th>정확도</th>}</tr></thead><tbody>
-      {entries.map((entry, index) => <tr key={entry.id}><td>{index + 1}</td><td>{entry.nickname}</td><td>{game === "climate" ? entry.score.toLocaleString() : formatDuration(entry.duration_ms!)}</td>{game !== "climate" && <td>{entry.accuracy}%</td>}</tr>\}}
-    </tbody></table>{loading ? <p className="rank-empty">랭킹을 불러오는 중…</p> : !entries.length && !message && <p className="rank-empty">아직 등록된 기록이 없어요. 첫 번째 여행자가 되어보세요.</p>}</div>
-    <p className="rank-description">닉네임은 계정이 아니며 중복될 수 있어요. 이 랭킹은 학습용으로, 공식 경쟁용 점수 검증은 제공하지 않습니다.</p>
-  </dialog>;
+  return (
+    <dialog ref={dialog} onCancel={onClose} className="ranking-dialog" aria-labelledby="ranking-title">
+      <header>
+        <div>
+          <p>GEO PLAYROOM · RANKINGS</p>
+          <h2 id="ranking-title">{game === "climate" ? "기후게임" : `타자연습 · ${game === "typing-ko" ? "한국어" : "English"}`} 랭킹</h2>
+        </div>
+        <button type="button" onClick={onClose}>닫기 ×</button>
+      </header>
+      <p className="rank-description">
+        {shared ? "전체 사용자 공유 랭킹 · 같은 배포 링크로 접속한 학생들의 기록을 함께 표시해요." : "공유 랭킹 설정 전 · 현재는 이 브라우저에만 저장돼요."}
+      </p>
+      <p className="rank-description">
+        {game === "climate" ? "게임 오버 후 최종 점수로 상위 100개 기록을 표시해요." : "197개국 완주 시간이 짧은 순서로 TOP 100을 표시해요. 동점은 정확도 순, 한국어·영어는 별도 랭킹이에요."}
+      </p>
+      <button type="button" disabled={loading || busy} onClick={() => { setMessage(""); void load().catch(error => setMessage(error.message)); }}>
+        랭킹 새로고침
+      </button>
+      {score !== undefined && (
+        <form onSubmit={event => { event.preventDefault(); void submit(); }} className="rank-register">
+          <label htmlFor="rank-nickname">닉네임 <span>실명 대신 별명을 사용하세요</span></label>
+          <input id="rank-nickname" value={nickname} maxLength={16} onChange={event => setNickname(event.target.value)} placeholder="여행자 이름" autoComplete="nickname" disabled={busy || submitted} />
+          <button type="submit" disabled={busy || submitted || score <= 0}>
+            {submitted ? "등록 완료" : busy ? "등록 중…" : `${game === "climate" ? `${score.toLocaleString()}점` : formatDuration(durationMs!)} 기록 등록`}
+          </button>
+        </form>
+      )}
+      <p role="status" className="rank-message">{message}</p>
+      <div className="rank-table-scroll" aria-busy={loading}>
+        <table>
+          <thead>
+            <tr>
+              <th>순위</th>
+              <th>닉네임</th>
+              <th>{game === "climate" ? "점수" : "완주 시간"}</th>
+              {game !== "climate" && <th>정확도</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((entry, index) => (
+              <tr key={entry.id}>
+                <td>{index + 1}</td>
+                <td>{entry.nickname}</td>
+                <td>{game === "climate" ? entry.score.toLocaleString() : formatDuration(entry.duration_ms!)}</td>
+                {game !== "climate" && <td>{entry.accuracy}%</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {loading ? (
+          <p className="rank-empty">랭킹을 불러오는 중…</p>
+        ) : !entries.length && !message && (
+          <p className="rank-empty">아직 등록된 기록이 없어요. 첫 번째 여행자가 되어보세요.</p>
+        )}
+      </div>
+      <p className="rank-description">닉네임은 계정이 아니며 중복될 수 있어요. 이 랭킹은 학습용으로, 공식 경쟁용 점수 검증은 제공하지 않습니다.</p>
+    </dialog>
+  );
 }
