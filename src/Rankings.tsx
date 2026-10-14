@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { formatDuration, topRankings, type RankingEntry as Entry } from "./rankingRules";
-import { projectId, publicAnonKey } from "./utils/supabase/info";
+
+// 외부 파일 참조 없이 코드 내에서 직접 연결 정보를 처리하여 경로 에러 원천 차단
+const projectId = 'suzzioegsbykdnplddlx';
+const publicAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1enppb2Vnc2J5a2RucGxkZGx4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyNDI5MzEsImV4cCI6MjEwNDgxODkzMX0.V_zWT6jxFdd0xWP_hqTo2hNlIyTibmuxv9HRyMcj4PU';
 
 const url = `https://${projectId}.supabase.co`;
 const apiKey = publicAnonKey;
