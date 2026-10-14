@@ -1,28 +1,38 @@
 import { useEffect, useRef, useState } from "react";
 import { formatDuration, topRankings, type RankingEntry as Entry } from "./rankingRules";
+import { projectId, publicAnonKey } from "./utils/supabase/info";
 
-const url = import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, "");
-const apiKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const shared = Boolean(url && apiKey);
+// 프로젝트 ID와 Anon Key로 Supabase REST URL 및 Key 설정
+const url = `https://${projectId}.supabase.co`;
+const apiKey = publicAnonKey;
+const shared = Boolean(projectId && apiKey);
 const storageKey = "geo-rankings-v1";
+
 function localEntries(): Entry[] {
   try {
     const data = JSON.parse(localStorage.getItem(storageKey) || "[]");
     return Array.isArray(data) ? data.filter(row => typeof row.nickname === "string" && Number.isFinite(row.score)) : [];
   } catch { return []; }
 }
+
 async function request(path: string, options?: RequestInit) {
   const response = await fetch(`${url}/rest/v1/${path}`, {
     ...options,
     headers: {
-      apikey: apiKey, Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json",
+      apikey: apiKey,
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
       ...options?.headers,
     },
     signal: AbortSignal.timeout(10000),
   });
-  if (!response.ok) throw new Error("공유 랭킹에 연결하지 못했어요. 네트워크와 Supabase SQL·배포 설정을 확인해주세요.");
+  if (!response.ok) {
+    const errText = await response.text().catch(() => "");
+    throw new Error(`공유 랭킹 통신 실패 (${response.status}): ${errText || "네트워크 상태를 확인해주세요."}`);
+  }
   return response.status === 201 || response.status === 204 ? null : response.json();
 }
+
 export default function Rankings({ recordId, game, score, durationMs, accuracy = 100, onClose }: {
   recordId: string; game: string; score?: number; durationMs?: number; accuracy?: number; onClose: () => void;
 }) {
@@ -35,6 +45,7 @@ export default function Rankings({ recordId, game, score, durationMs, accuracy =
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(true);
+
   const load = async () => {
     setLoading(true);
     try {
@@ -44,13 +55,15 @@ export default function Rankings({ recordId, game, score, durationMs, accuracy =
         ? await request(`geo_rankings?game=eq.${game}${filter}&select=*&order=${order},accuracy.desc,created_at.asc,id.asc&limit=100`)
         : localEntries();
       setEntries(topRankings(rows, game));
-      if (rows.some(row => row.id === recordId)) setSubmitted(true);
+      if (rows && rows.some(row => row.id === recordId)) setSubmitted(true);
     } finally { setLoading(false); }
   };
+
   useEffect(() => {
     dialog.current?.showModal();
     void load().catch(error => setMessage(error.message));
   }, [game]);
+
   const submit = async () => {
     if (busy || submitted || score === undefined || score <= 0) return;
     if (game !== "climate" && (score !== 197 || !Number.isInteger(durationMs) || durationMs! <= 0)) {
@@ -59,31 +72,48 @@ export default function Rankings({ recordId, game, score, durationMs, accuracy =
     const name = nickname.trim();
     if (!name || Array.from(name).length > 16) { setMessage("닉네임을 1~16자로 입력해주세요."); return; }
     setBusy(true); setMessage("");
-    const entry: Entry = { id: recordId, nickname: name, game, score, accuracy, duration_ms: game === "climate" ? null : durationMs, created_at: new Date().toISOString() };
+
+    // UUID 및 수치형 데이터 포함
+    const entry: Entry = {
+      id: recordId || crypto.randomUUID(),
+      nickname: name,
+      game,
+      score,
+      accuracy,
+      duration_ms: game === "climate" ? null : durationMs,
+      created_at: new Date().toISOString()
+    };
+
     try {
       if (shared) {
-        await request("geo_rankings?on_conflict=id", {
-          method: "POST", headers: { Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify(entry),
+        await request("geo_rankings", {
+          method: "POST",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify(entry),
         });
       } else {
         localStorage.setItem(storageKey, JSON.stringify([...localEntries().filter(row => row.id !== recordId), entry].slice(-500)));
       }
-      try { localStorage.setItem("geo-nickname", name); } catch { /* nickname persistence is optional */ }
+      try { localStorage.setItem("geo-nickname", name); } catch {}
       setSubmitted(true);
       try {
         await load();
-        setMessage(shared ? "공유 랭킹에 기록을 저장했어요. 다른 학생들도 확인할 수 있어요." : "이 브라우저에만 저장했어요. 공유 랭킹은 아직 연결되지 않았어요.");
+        setMessage(shared ? "공유 랭킹에 기록을 저장했어요. 다른 학생들도 확인할 수 있어요." : "이 브라우저에만 저장했어요.");
       } catch {
         setMessage("기록은 저장됐지만 목록을 불러오지 못했어요. 랭킹 새로고침을 눌러주세요.");
       }
-    } catch (error) { setMessage(shared && error instanceof Error ? error.message : "기록을 저장하지 못했어요. 브라우저의 저장 공간과 사이트 데이터 저장 허용 여부를 확인해주세요."); }
-    finally { setBusy(false); }
+    } catch (error) { 
+      setMessage(error instanceof Error ? error.message : "기록을 저장하지 못했어요."); 
+    } finally { 
+      setBusy(false); 
+    }
   };
+
   return <dialog ref={dialog} onCancel={onClose} className="ranking-dialog" aria-labelledby="ranking-title">
     <header><div><p>GEO PLAYROOM · RANKINGS</p><h2 id="ranking-title">{game === "climate" ? "기후게임" : `타자연습 · ${game === "typing-ko" ? "한국어" : "English"}`} 랭킹</h2></div><button type="button" onClick={onClose}>닫기 ×</button></header>
     <p className="rank-description">{shared
       ? "전체 사용자 공유 랭킹 · 같은 배포 링크로 접속한 학생들의 기록을 함께 표시해요."
-      : "공유 랭킹 설정 전 · 현재는 이 브라우저에만 저장돼요. 제가 Supabase와 GitHub 배포 환경 변수를 설정해야하는데 아직 적용을 못했습니다."}</p>
+      : "공유 랭킹 설정 전 · 현재는 이 브라우저에만 저장돼요."}</p>
     <p className="rank-description">{game === "climate" ? "게임 오버 후 최종 점수로 상위 100개 기록을 표시해요." : "197개국 완주 시간이 짧은 순서로 TOP 100을 표시해요. 동점은 정확도 순, 한국어·영어는 별도 랭킹이에요."}</p>
     <button type="button" disabled={loading || busy} onClick={() => { setMessage(""); void load().catch(error => setMessage(error.message)); }}>랭킹 새로고침</button>
     {score !== undefined && <form onSubmit={event => { event.preventDefault(); void submit(); }} className="rank-register">
