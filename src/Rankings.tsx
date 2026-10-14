@@ -1,0 +1,100 @@
+import { useEffect, useRef, useState } from "react";
+import { formatDuration, topRankings, type RankingEntry as Entry } from "./rankingRules";
+
+const url = import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, "");
+const apiKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const shared = Boolean(url && apiKey);
+const storageKey = "geo-rankings-v1";
+function localEntries(): Entry[] {
+  try {
+    const data = JSON.parse(localStorage.getItem(storageKey) || "[]");
+    return Array.isArray(data) ? data.filter(row => typeof row.nickname === "string" && Number.isFinite(row.score)) : [];
+  } catch { return []; }
+}
+async function request(path: string, options?: RequestInit) {
+  const response = await fetch(`${url}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      apikey: apiKey, Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json",
+      ...options?.headers,
+    },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok) throw new Error("공유 랭킹에 연결하지 못했어요. 네트워크와 Supabase SQL·배포 설정을 확인해주세요.");
+  return response.status === 201 || response.status === 204 ? null : response.json();
+}
+export default function Rankings({ recordId, game, score, durationMs, accuracy = 100, onClose }: {
+  recordId: string; game: string; score?: number; durationMs?: number; accuracy?: number; onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [nickname, setNickname] = useState(() => {
+    try { return localStorage.getItem("geo-nickname") || ""; } catch { return ""; }
+  });
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const load = async () => {
+    setLoading(true);
+    try {
+      const order = game === "climate" ? "score.desc" : "duration_ms.asc";
+      const filter = game === "climate" ? "" : "&duration_ms=not.is.null&score=eq.197";
+      const rows: Entry[] = shared
+        ? await request(`geo_rankings?game=eq.${game}${filter}&select=*&order=${order},accuracy.desc,created_at.asc,id.asc&limit=100`)
+        : localEntries();
+      setEntries(topRankings(rows, game));
+      if (rows.some(row => row.id === recordId)) setSubmitted(true);
+    } finally { setLoading(false); }
+  };
+  useEffect(() => {
+    dialog.current?.showModal();
+    void load().catch(error => setMessage(error.message));
+  }, [game]);
+  const submit = async () => {
+    if (busy || submitted || score === undefined || score <= 0) return;
+    if (game !== "climate" && (score !== 197 || !Number.isInteger(durationMs) || durationMs! <= 0)) {
+      setMessage("197개국을 모두 완주한 기록만 등록할 수 있어요."); return;
+    }
+    const name = nickname.trim();
+    if (!name || Array.from(name).length > 16) { setMessage("닉네임을 1~16자로 입력해주세요."); return; }
+    setBusy(true); setMessage("");
+    const entry: Entry = { id: recordId, nickname: name, game, score, accuracy, duration_ms: game === "climate" ? null : durationMs, created_at: new Date().toISOString() };
+    try {
+      if (shared) {
+        await request("geo_rankings?on_conflict=id", {
+          method: "POST", headers: { Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify(entry),
+        });
+      } else {
+        localStorage.setItem(storageKey, JSON.stringify([...localEntries().filter(row => row.id !== recordId), entry].slice(-500)));
+      }
+      try { localStorage.setItem("geo-nickname", name); } catch { /* nickname persistence is optional */ }
+      setSubmitted(true);
+      try {
+        await load();
+        setMessage(shared ? "공유 랭킹에 기록을 저장했어요. 다른 학생들도 확인할 수 있어요." : "이 브라우저에만 저장했어요. 공유 랭킹은 아직 연결되지 않았어요.");
+      } catch {
+        setMessage("기록은 저장됐지만 목록을 불러오지 못했어요. 랭킹 새로고침을 눌러주세요.");
+      }
+    } catch (error) { setMessage(shared && error instanceof Error ? error.message : "기록을 저장하지 못했어요. 브라우저의 저장 공간과 사이트 데이터 저장 허용 여부를 확인해주세요."); }
+    finally { setBusy(false); }
+  };
+  return <dialog ref={dialog} onCancel={onClose} className="ranking-dialog" aria-labelledby="ranking-title">
+    <header><div><p>GEO PLAYROOM · RANKINGS</p><h2 id="ranking-title">{game === "climate" ? "기후게임" : `타자연습 · ${game === "typing-ko" ? "한국어" : "English"}`} 랭킹</h2></div><button type="button" onClick={onClose}>닫기 ×</button></header>
+    <p className="rank-description">{shared
+      ? "전체 사용자 공유 랭킹 · 같은 배포 링크로 접속한 학생들의 기록을 함께 표시해요."
+      : "공유 랭킹 설정 전 · 현재는 이 브라우저에만 저장돼요. 운영자가 Supabase와 GitHub 배포 환경 변수를 설정해야 다른 학생과 공유됩니다."}</p>
+    <p className="rank-description">{game === "climate" ? "게임 오버 후 최종 점수로 상위 100개 기록을 표시해요." : "197개국 완주 시간이 짧은 순서로 TOP 100을 표시해요. 동점은 정확도 순, 한국어·영어는 별도 랭킹이에요."}</p>
+    <button type="button" disabled={loading || busy} onClick={() => { setMessage(""); void load().catch(error => setMessage(error.message)); }}>랭킹 새로고침</button>
+    {score !== undefined && <form onSubmit={event => { event.preventDefault(); void submit(); }} className="rank-register">
+      <label htmlFor="rank-nickname">닉네임 <span>실명 대신 별명을 사용하세요</span></label>
+      <input id="rank-nickname" value={nickname} maxLength={16} onChange={event => setNickname(event.target.value)} placeholder="여행자 이름" autoComplete="nickname" disabled={busy || submitted} />
+      <button type="submit" disabled={busy || submitted || score <= 0}>{submitted ? "등록 완료" : busy ? "등록 중…" : `${game === "climate" ? `${score.toLocaleString()}점` : formatDuration(durationMs!)} 기록 등록`}</button>
+    </form>}
+    <p role="status" className="rank-message">{message}</p>
+    <div className="rank-table-scroll" aria-busy={loading}><table><thead><tr><th>순위</th><th>닉네임</th><th>{game === "climate" ? "점수" : "완주 시간"}</th>{game !== "climate" && <th>정확도</th>}</tr></thead><tbody>
+      {entries.map((entry, index) => <tr key={entry.id}><td>{index + 1}</td><td>{entry.nickname}</td><td>{game === "climate" ? entry.score.toLocaleString() : formatDuration(entry.duration_ms!)}</td>{game !== "climate" && <td>{entry.accuracy}%</td>}</tr>)}
+    </tbody></table>{loading ? <p className="rank-empty">랭킹을 불러오는 중…</p> : !entries.length && !message && <p className="rank-empty">아직 등록된 기록이 없어요. 첫 번째 여행자가 되어보세요.</p>}</div>
+    <p className="rank-description">닉네임은 계정이 아니며 중복될 수 있어요. 이 랭킹은 학습용으로, 공식 경쟁용 점수 검증은 제공하지 않습니다.</p>
+  </dialog>;
+}
