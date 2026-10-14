@@ -1,6 +1,7 @@
 import { ChangeEvent, lazy, memo, PointerEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createHashRouter, Link, RouterProvider } from "react-router";
 import Matter from "matter-js";
+import Rankings from "./Rankings";
 import { additionalCountries, countryDataAttribution } from "./countries";
 
 const RhythmGame = lazy(() => import("./RhythmGame"));
@@ -141,6 +142,13 @@ const MapFrames = memo(function MapFrames({
 });
 
 function CountryTyping() {
+  const [rankOpen, setRankOpen] = useState(false);
+  const [challenge, setChallenge] = useState(false);
+  const startedAt = useRef(0);
+  const [completionMs, setCompletionMs] = useState<number>();
+  const [typingRunId, setTypingRunId] = useState(() => crypto.randomUUID());
+  const [rankLanguage, setRankLanguage] = useState<"ko" | "en">("ko");
+
   const [session, setSession] = useState(() => {
     const order = shuffleCountries();
     return { order, upcoming: shuffleCountries(order.at(-1)!.code), index: 0 };
@@ -156,6 +164,7 @@ function CountryTyping() {
   const [theme, setTheme] = useState(() => storedSetting("geo-typing-theme", "dark") === "dark" ? "dark" : "light");
   const [mapMode, setMapMode] = useState<"map" | "satellite">(() => storedSetting("geo-typing-map", "map") === "satellite" ? "satellite" : "map");
   const [inputEpoch, setInputEpoch] = useState(0);
+  const finished = challenge && completionMs !== undefined;
   const composing = useRef(false);
   const committedInput = useRef("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -170,9 +179,10 @@ function CountryTyping() {
   useEffect(() => () => { void audioContext.current?.close(); }, []);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setElapsed((value) => value + 1), 1000);
+    if (finished) return;
+    const timer = window.setInterval(() => setElapsed(value => challenge ? Math.floor((performance.now() - startedAt.current) / 1000) : value + 1), challenge ? 100 : 1000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [challenge, finished]);
 
   const resetInput = useCallback(() => {
     advancing.current = false;
@@ -243,13 +253,19 @@ function CountryTyping() {
     advancing.current = true;
     playSuccessSound();
     setCorrect((value) => value + 1);
+    if (challenge && index === session.order.length - 1) {
+      const duration = Math.max(1, Math.round(performance.now() - startedAt.current));
+      setCompletionMs(duration);
+      setElapsed(duration / 1000);
+      return;
+    }
     setSession(value => value.index + 1 < value.order.length
       ? { ...value, index: value.index + 1 }
       : { order: value.upcoming, upcoming: shuffleCountries(value.upcoming.at(-1)!.code), index: 0 });
   };
 
   const commitInput = (value: string) => {
-    if (advancing.current || value === committedInput.current) return;
+    if (finished || advancing.current || value === committedInput.current) return;
     const result = evaluateTyping(committedInput.current, value, target);
     committedInput.current = value;
     setMatchedCharacters(total => total + result.matched);
@@ -274,10 +290,11 @@ function CountryTyping() {
     () => (elapsed ? Math.round((matchedCharacters / elapsed) * 60) : 0),
     [matchedCharacters, elapsed]
   );
-  const time = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
+  const time = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(Math.floor(elapsed % 60)).padStart(2, "0")}`;
 
   return (
     <main data-theme={theme} className="typing-room flex min-h-screen flex-col overflow-hidden">
+      {rankOpen && <Rankings recordId={typingRunId} game={`typing-${challenge ? rankLanguage : language}`} score={finished ? correct : undefined} durationMs={finished ? completionMs : undefined} accuracy={accuracy} onClose={() => setRankOpen(false)} />}
       <header className="typing-header flex min-h-16 shrink-0 items-center justify-between gap-3 px-5 py-3 sm:px-8">
         <div className="flex items-center gap-3">
           <Link to="/" className="grid h-9 w-9 place-items-center rounded-[11px] bg-[#3b9d44] text-sm font-black text-white">
@@ -288,6 +305,12 @@ function CountryTyping() {
             <p className="text-[10px] font-medium text-[#809080]">세계시민과 지리 · 나라 이름 연습</p>
           </div>
         </div>
+        <div className="typing-rank-controls"><button type="button" onClick={() => setRankOpen(true)}>랭킹</button><button type="button" onClick={() => {
+          if (challenge && !finished && !window.confirm("진행 중인 도전을 다시 시작할까요?")) return;
+          startedAt.current = performance.now(); setCompletionMs(undefined); setTypingRunId(crypto.randomUUID());
+          setRankLanguage(language); setChallenge(true); setElapsed(0); setCorrect(0); setErrors(0); setMatchedCharacters(0); resetInput();
+          const order = shuffleCountries(); setSession({ order, upcoming: shuffleCountries(order.at(-1)!.code), index: 0 });
+        }}>197개국 완주 도전</button></div>
         <div className="typing-theme" role="group" aria-label="화면 테마"><button type="button" aria-pressed={theme === "light"} onClick={() => setTheme("light")}>☀ 화이트</button><button type="button" aria-pressed={theme === "dark"} onClick={() => setTheme("dark")}>☾ 다크</button></div>
         <p className="hidden font-mono text-[11px] text-[#778778] sm:block">LESSON 01 / WORLD MAP</p>
       </header>
@@ -314,13 +337,13 @@ function CountryTyping() {
             </button>
             <div className="flex rounded-full bg-white p-0.5 shadow-md">
               <button
-                onClick={() => setLanguage("ko")}
+                disabled={challenge && !finished} onClick={() => { setChallenge(false); setLanguage("ko"); }}
                 className={`rounded-full px-2.5 py-1 text-xs font-bold ${language === "ko" ? "bg-[#3b9d44] text-white" : "text-[#607160]"}`}
               >
                 한국어
               </button>
               <button
-                onClick={() => setLanguage("en")}
+                disabled={challenge && !finished} onClick={() => { setChallenge(false); setLanguage("en"); }}
                 className={`rounded-full px-2.5 py-1 text-xs font-bold ${language === "en" ? "bg-[#3b9d44] text-white" : "text-[#607160]"}`}
               >
                 English
@@ -374,6 +397,7 @@ function CountryTyping() {
               <input
                 key={`${index}-${language}-${inputEpoch}`}
                 ref={inputRef}
+                disabled={finished}
                 type="text"
                 onChange={handleChange}
                 aria-label={`${target} 나라 이름 입력`}
@@ -393,6 +417,7 @@ function CountryTyping() {
                 spellCheck={false}
               />
             </div>
+            {challenge && <p className="typing-caption" role="status">{finished ? `197개국 완주 · ${(completionMs! / 1000).toFixed(3)}초 · 정확도 ${accuracy}%` : `197개국 완주 도전 · ${correct} / 197 완료 · 도전 중 언어 변경 불가`}{finished && <button type="button" className="rank-action" onClick={() => setRankOpen(true)}>완주 기록 등록</button>}</p>}
             <p className="typing-caption">{typingLesson.length}개 국가·지역을 한 바퀴 동안 중복 없이 무작위로 연습해요 · 지도 모드는 유지돼요<br />한글은 조합이 끝난 글자만 채점해요 · <a href={countryDataAttribution.source} target="_blank" rel="noreferrer">국가 데이터: mledoze/countries</a> · <a href={countryDataAttribution.license} target="_blank" rel="noreferrer">ODbL</a></p>
           </div>
         </div>
@@ -483,33 +508,16 @@ type ClimatePiece = { id: number; key: string; parts: Primary[]; x: number; y: n
 type ClimateBody = Matter.Body & { climateKey?: string; climateParts?: Primary[]; popped?: boolean; bornAt?: number; spilled?: boolean };
 type ClimateNode = { code: string; name: string; icon: string; color: string; size: number; next?: string };
 
-const climateGroups: { id: Primary; title: string; chain: string[]; color: string }[] = [
-  { id: "A", title: "열대", chain: ["Aw", "Am", "Af", "A"], color: "#ed7555" },
-  { id: "B", title: "건조", chain: ["BS", "BW", "B"], color: "#d7a84a" },
-  { id: "C", title: "온대", chain: ["Cfb", "Cfa", "Csb", "Csa", "C"], color: "#5da873" },
-  { id: "D", title: "냉대", chain: ["Df", "Dw", "Ds", "D"], color: "#668fc0" },
-  { id: "E", title: "한대", chain: ["ET", "EF", "E"], color: "#a9d0dc" },
-];
-const climateNodes: Record<string, ClimateNode> = {
-  Am: { code: "Am", name: "열대몬순", icon: "🌦️", color: "#ee8960", size: 104, next: "Aw" }, Aw: { code: "Aw", name: "열대사바나", icon: "🦒", color: "#e7b94e", size: 124, next: "As" }, As: { code: "As", name: "열대 하계건조", icon: "🌞", color: "#e99d55", size: 144, next: "Af" }, Af: { code: "Af", name: "열대우림", icon: "🌴", color: "#61ad71", size: 166, next: "A" }, A: { code: "A", name: "열대기후", icon: "🌴", color: "#df6f4f", size: 194 },
-  BS: { code: "BS", name: "스텝", icon: "🌾", color: "#d6a85d", size: 108, next: "BW" }, BW: { code: "BW", name: "사막", icon: "☀️", color: "#dfb53e", size: 142, next: "B" }, B: { code: "B", name: "건조기후", icon: "🏜️", color: "#c89339", size: 194 },
-  Cfb: { code: "Cfb", name: "서안 해양성", icon: "🌱", color: "#66a879", size: 108, next: "Cfa" }, Cfa: { code: "Cfa", name: "온난 습윤", icon: "🌿", color: "#499861", size: 132, next: "Csb" }, Csb: { code: "Csb", name: "지중해성", icon: "🍋", color: "#72ae6a", size: 154, next: "Csa" }, Csa: { code: "Csa", name: "고온 지중해성", icon: "🌻", color: "#78a954", size: 172, next: "C" }, C: { code: "C", name: "온대기후", icon: "🌳", color: "#4e9e72", size: 194 },
-  Df: { code: "Df", name: "냉대 습윤", icon: "🌲", color: "#789cc7", size: 110, next: "Dw" }, Dw: { code: "Dw", name: "냉대 겨울건조", icon: "🏔️", color: "#5d82b3", size: 140, next: "Ds" }, Ds: { code: "Ds", name: "냉대 하계건조", icon: "🍂", color: "#6c8cb8", size: 166, next: "D" }, D: { code: "D", name: "냉대기후", icon: "🌲", color: "#5b78aa", size: 194 },
-  ET: { code: "ET", name: "툰드라", icon: "❄️", color: "#a9d5dc", size: 112, next: "EF" }, EF: { code: "EF", name: "빙설", icon: "🧊", color: "#d1ebee", size: 148, next: "E" }, E: { code: "E", name: "한대기후", icon: "🧊", color: "#9fc4d6", size: 194 },
-};
-climateNodes.Aw = { ...climateNodes.Aw, size: 104, next: "Am" };
-climateNodes.Am = { ...climateNodes.Am, size: 132, next: "Af" };
-delete climateNodes.As;
-const fusionEntries = [
-  ["AB", "🏜️", "열대사막"], ["AC", "🏝️", "온대정글"], ["AD", "⚡", "빙하화산"], ["AE", "🌋", "초열동토"], ["BC", "🌾", "온대초원"], ["BD", "❄️", "빙황무지"], ["BE", "🧊", "하얀사막"], ["CD", "🍁", "온냉대림"], ["CE", "🏔️", "빙하의봄"], ["DE", "🌌", "극한겨울"],
-  ["ABC", "🏺", "열대오아"], ["ABD", "🌋", "화산황무"], ["ABE", "☄️", "열사빙하"], ["ACD", "🌿", "사계정글"], ["ACE", "🌊", "간헐천섬"], ["ADE", "🧊", "녹는빙하"], ["BCD", "🐎", "유라시아"], ["BCE", "🏜️", "대륙빙하"], ["BDE", "🌬️", "시베리아"], ["CDE", "🌲", "북유럽숲"],
-  ["ABCD", "⛰️", "거대대륙"], ["ABCE", "🗺️", "사막빙도"], ["ABDE", "🌋", "극지화산"], ["ACDE", "❄️", "녹색빙해"], ["BCDE", "🌬️", "북반구대"], ["ABCDE", "🌍", "지구"],
-] as const;
-const fusions = Object.fromEntries(fusionEntries.map(([key, icon, name]) => [key, { icon, name, color: key.length === 5 ? "#4e92c6" : "#886d98" }]));
-function nodeFor(key: string): ClimateNode {
-  const node = climateNodes[key] ?? { code: key, ...fusions[key], size: key === "ABCDE" ? 183 : 207 };
-  return { ...node, size: Math.round(node.size * 0.96) };
-}
+const climateChain = ["Aw", "Am", "Af", "BS", "BW", "Cfb", "Cfa", "Df", "Dw", "Ds", "ET", "EF", "Earth"];
+const randomClimateKey = () => climateChain[Math.floor(Math.random() * 3)];
+const createClimateQueue = () => Array.from({ length: 4 }, randomClimateKey);
+const climateNames = ["열대 사바나", "열대 몬순", "열대 우림", "스텝", "사막", "서안 해양성", "온난 습윤", "냉대 습윤", "냉대 겨울 건조", "냉대 여름 건조", "툰드라", "빙설", "지구"];
+const climateColors = ["#e7b94e", "#ee8960", "#61ad71", "#d6a85d", "#dfb53e", "#66a879", "#499861", "#789cc7", "#5d82b3", "#6c8cb8", "#a9d5dc", "#d1ebee", "#4e92c6"];
+const climateNodes: Record<string, ClimateNode> = Object.fromEntries(climateChain.map((code, index) => [code, {
+  code, name: climateNames[index], icon: "", color: climateColors[index], size: 62 + index * 13,
+  next: climateChain[index + 1],
+}]));
+function nodeFor(key: string): ClimateNode { return climateNodes[key]; }
 
 function comboReward(count: number) {
   const labels = ["Good!", "Great!", "Perfect!", "Excellent!", "Marvelous!!"];
@@ -519,36 +527,12 @@ function comboReward(count: number) {
 
 function ClimateAtlas({ onClose }: { onClose: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const [selected, setSelected] = useState("ABCDE");
-  const keys = [...climateGroups.map(group => group.id), ...fusionEntries.map(entry => entry[0])];
-  const positions = Object.fromEntries(keys.map(key => {
-    const tier = keys.filter(candidate => candidate.length === key.length);
-    return [key, { x: 90 + (key.length - 1) * 205, y: 55 + (tier.indexOf(key) + .5) * (620 / tier.length) }];
-  }));
-  const recipes: { first: string; second: string; result: string }[] = [];
-  for (let first = 0; first < keys.length; first += 1) {
-    for (let second = first + 1; second < keys.length; second += 1) {
-      const result = [...keys[first], ...keys[second]].sort().join("");
-      if (![...keys[first]].some(part => keys[second].includes(part)) && fusions[result]) recipes.push({ first: keys[first], second: keys[second], result });
-    }
-  }
-  const links = [...new Set(recipes.flatMap(recipe => [`${recipe.first}:${recipe.result}`, `${recipe.second}:${recipe.result}`]))];
   useEffect(() => { dialogRef.current?.showModal(); }, []);
   return <dialog ref={dialogRef} onCancel={onClose} className="climate-atlas" aria-labelledby="atlas-title">
-    <header><div><p>CLIMATE CONNECTIONS</p><h2 id="atlas-title">지구를 만드는 합성 지도</h2></div><button autoFocus type="button" onClick={onClose} aria-label="합성 도감 닫기">닫기 ×</button></header>
-    <p className="atlas-intro">같은 세부 기후 2개를 합쳐 대분류를 완성하세요. A–E는 서로 겹치지 않는 구성끼리만 합성됩니다. 노드를 눌러 모든 조합을 확인하세요.</p>
-    <div className="atlas-routes">{climateGroups.map(group => <section key={group.id}><b>{group.id} · {group.title}</b><p>{group.chain.join(" → ")}</p></section>)}</div>
-    <div className="atlas-scroll"><div className="atlas-map">
-      <div className="atlas-tiers">{["대분류", "2개 기후", "3개 기후", "4개 기후", "지구"].map(label => <span key={label}>{label}</span>)}</div>
-      <svg viewBox="0 0 1000 700" aria-hidden="true">{links.map(link => {
-        const [from, to] = link.split(":"); const start = positions[from]; const end = positions[to];
-        const highlighted = to === selected;
-        return <path key={link} d={`M ${start.x} ${start.y} C ${start.x + 95} ${start.y}, ${end.x - 95} ${end.y}, ${end.x} ${end.y}`} fill="none" stroke={highlighted ? "#e4f252" : "#a0c6a0"} strokeWidth={highlighted ? 2.5 : 1} opacity={highlighted ? .9 : .12} />;
-      })}</svg>
-      {keys.map(key => { const node = nodeFor(key); const position = positions[key]; return <button key={key} type="button" aria-pressed={selected === key} onClick={() => setSelected(key)} className={`atlas-node ${selected === key ? "is-selected" : ""}`} style={{ left: `${position.x / 10}%`, top: `${position.y / 7}%` }}><span>{node.icon} <b>{key}</b></span><small>{node.name}</small></button>; })}
-    </div></div>
-    <section className="atlas-recipes" aria-live="polite"><b>{selected} · {nodeFor(selected).name}</b><div>{selected.length === 1 ? <span>{climateGroups.find(group => group.id === selected)?.chain.join(" → ")} · 각 단계는 같은 공 2개</span> : recipes.filter(recipe => recipe.result === selected).map(recipe => <span key={`${recipe.first}:${recipe.second}`}>{recipe.first} + {recipe.second} → {recipe.result}</span>)}</div></section>
-    <p className="atlas-note">중간 조합 이름은 게임용 표현이며 실제 쾨펜 기후 분류가 아닙니다. 3차 구분은 a·b만 사용합니다.</p>
+    <header><div><p>CLIMATE EVOLUTION</p><h2 id="atlas-title">13단계 기후 합성 지도</h2></div><button autoFocus onClick={onClose}>닫기 ×</button></header>
+    <p className="atlas-intro">같은 공 두 개만 합쳐집니다. 다른 기후 공은 합쳐지지 않으며, Earth는 마지막 단계입니다.</p>
+    <ol className="climate-evolution">{climateChain.map((key, index) => <li key={key}><b>{String(index + 1).padStart(2, "0")} · {key}</b><span>{nodeFor(key).name}</span><small>{index < 12 ? `${key} + ${key} → ${climateChain[index + 1]}` : "지구 완성 · +10,000점"}</small></li>)}</ol>
+    <p className="atlas-note">이 순서는 게임용 합성 규칙이며 실제 기후의 변화 순서를 뜻하지 않습니다.</p>
   </dialog>;
 }
 
@@ -558,18 +542,20 @@ function ClimateHelp({ onClose }: { onClose: () => void }) {
   return <dialog ref={dialogRef} onCancel={onClose} className="climate-atlas climate-help" aria-labelledby="help-title">
     <header><div><p>HOW TO PLAY</p><h2 id="help-title">작은 기후에서, 지구까지.</h2></div><button autoFocus type="button" onClick={onClose}>닫기 ×</button></header>
     <div className="help-steps">
-      <section><span>01</span><div><h3>위치를 고르고 톡!</h3><p>바구니 안을 누르면 기후 공이 떨어져요. 열대·건조·온대·냉대·한대 버튼은 다음에 떨어뜨릴 기후만 바꾸고, 바구니는 그대로 유지돼요.</p></div></section>
-      <section><span>02</span><div><h3>같은 공을 만나게 해주세요</h3><p>같은 세부 기후 공 2개가 만나면 다음 단계로 진화해요. 완성한 A–E는 겹치지 않는 구성끼리 합칠 수 있어요. 전체 경로는 ‘합성 지도’에서 확인하세요.</p></div></section>
-      <section><span>03</span><div><h3>연쇄 합성으로 콤보!</h3><p>방금 만들어진 공이 <b>1.5초 안에 다시 합성</b>되면 콤보가 이어져요. 새 공을 떨어뜨리거나, 다른 공끼리 합성되거나, 시간이 지나면 콤보가 끊겨요.</p><p className="help-score">Good! 10점 → Great! 20점 → Perfect! 30점 → Excellent! 40점 → Marvelous!! 50점</p><p>그 다음은 Marvelous!! ×2 = 100점, ×3 = 150점… 지구 완성은 <b>10,000점</b>이에요.</p></div></section>
+      <section><span>01</span><div><h3>위치를 고르고 톡!</h3><p>바구니 안을 누르면 기후 공이 떨어져요. 처음 세 단계인 Aw·Am·Af 중 하나가 무작위로 나와요.</p></div></section>
+      <section><span>02</span><div><h3>같은 공을 만나게 해주세요</h3><p>같은 세부 기후 공 2개가 만나면 다음 단계로 진화해요. Aw부터 EF까지 순서대로 합쳐 마지막 Earth를 만드세요. 서로 다른 공은 합쳐지지 않아요. 전체 경로는 ‘합성 지도’에서 확인하세요.</p></div></section>
+      <section><span>03</span><div><h3>연쇄 합성으로 콤보!</h3><p>방금 만들어진 공이 <b>1.75초 안에 다시 합성</b>되면 콤보가 이어져요. 새 공을 떨어뜨리거나, 다른 공끼리 합성되거나, 시간이 지나면 콤보가 끊겨요.</p><p className="help-score">Good! 10점 → Great! 20점 → Perfect! 30점 → Excellent! 40점 → Marvelous!! 50점</p><p>그 다음은 Marvelous!! ×2 = 100점, ×3 = 150점… 지구 완성은 <b>10,000점</b>이에요.</p></div></section>
       <section><span>04</span><div><h3>넘치기 전에 공간을 만들어요</h3><p>공이 바구니 위로 넘쳐 바깥 바닥에 떨어지면 게임 오버! 옆벽에 닿는 것만으로 끝나지는 않아요. ‘♪ 소리’ 버튼으로 효과음을 켜거나 끌 수 있어요.</p></div></section>
-    </div><p className="atlas-note">설명을 읽는 동안 게임은 일시정지돼요. 중간 조합은 게임용 표현이며 실제 기후 분류와는 달라요.</p>
+    </div><p className="atlas-note">설명을 읽는 동안 게임은 일시정지돼요. 합성 순서는 학습 게임용이며 실제 기후 변화 과정이 아니에요.</p>
   </dialog>;
 }
 
 function ClimateMerge() {
   const [pieces, setPieces] = useState<ClimatePiece[]>([]);
-  const [activePrimary, setActivePrimary] = useState<Primary>("A");
-  const [nextKey, setNextKey] = useState("Am");
+  const [climateRunId, setClimateRunId] = useState(() => crypto.randomUUID());
+  const [dropQueue, setDropQueue] = useState(createClimateQueue);
+  const nextKey = dropQueue[0];
+  const [rankOpen, setRankOpen] = useState(false);
   const [score, setScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
   const [ready, setReady] = useState(true);
@@ -603,22 +589,13 @@ function ClimateMerge() {
   const basketRim = 92;
   const basketInset = 30;
   const basketBottom = 765;
-  const activeGroup = climateGroups.find((group) => group.id === activePrimary)!;
   useEffect(() => {
     const runner = runnerRef.current;
     const engine = engineRef.current;
     if (!runner || !engine || endedRef.current) return;
-    if (atlasOpen || helpOpen) Matter.Runner.stop(runner);
+    if (atlasOpen || helpOpen || rankOpen) Matter.Runner.stop(runner);
     else { comboRef.current = { count: 0, time: 0, bodyId: null }; setCombo(0); Matter.Runner.run(runner, engine); }
-  }, [atlasOpen, helpOpen]);
-  const randomDropKey = useCallback((group: (typeof climateGroups)[number]) => {
-    const candidates = group.chain.slice(0, Math.min(3, group.chain.length - 1));
-    return candidates[Math.floor(Math.random() * candidates.length)];
-  }, []);
-
-  useEffect(() => {
-    setNextKey(randomDropKey(activeGroup));
-  }, [activePrimary, activeGroup, randomDropKey]);
+  }, [atlasOpen, helpOpen, rankOpen]);
 
   const playMergeSound = (kind: "step" | "region" | "earth" | "drop" | "over") => {
     if (!soundRef.current) return;
@@ -744,7 +721,7 @@ function ClimateMerge() {
           }
         }
       }
-      if (comboRef.current.count > 0 && now - comboRef.current.time >= 1500) {
+      if (comboRef.current.count > 0 && now - comboRef.current.time >= 1750) {
         comboRef.current = { count: 0, time: 0, bodyId: null };
         setCombo(0);
       }
@@ -773,17 +750,8 @@ function ClimateMerge() {
         if ((a.label === "outside-ground" && b.spilled && !b.popped) || (b.label === "outside-ground" && a.spilled && !a.popped)) { endGame(); return; }
         if (a.isStatic || b.isStatic) continue;
         if (!a.climateKey || !b.climateKey || a.popped || b.popped || a.spilled || b.spilled) continue;
-        const aParts = a.climateParts ?? [];
-        const bParts = b.climateParts ?? [];
-        const sharesClimate = aParts.some((part) => bParts.includes(part));
-        const mergedParts = [...new Set([...aParts, ...bParts])].sort() as Primary[];
-        const fusionKey = mergedParts.join("");
-        const nextKey = a.climateKey === b.climateKey
-          ? climateNodes[a.climateKey]?.next
-          : !sharesClimate && aParts.length > 0 && bParts.length > 0 && fusions[fusionKey]
-            ? fusionKey
-            : undefined;
-        const nextParts = a.climateKey === b.climateKey ? (nextKey?.length === 1 ? [nextKey as Primary] : aParts) : mergedParts;
+        const nextKey = a.climateKey === b.climateKey ? climateNodes[a.climateKey]?.next : undefined;
+        const nextParts: Primary[] = [];
         if (!nextKey) continue;
         a.popped = true;
         b.popped = true;
@@ -798,15 +766,15 @@ function ClimateMerge() {
         Matter.Composite.remove(engine.world, [a, b]);
         Matter.Composite.add(engine.world, merged);
         const now = performance.now();
-        const continuesChain = comboRef.current.count > 0 && now - comboRef.current.time < 1500 && (a.id === comboRef.current.bodyId || b.id === comboRef.current.bodyId);
+        const continuesChain = comboRef.current.count > 0 && now - comboRef.current.time < 1750 && (a.id === comboRef.current.bodyId || b.id === comboRef.current.bodyId);
         const count = continuesChain ? comboRef.current.count + 1 : 1;
-        const earned = nextKey === "ABCDE" ? 10000 : comboReward(count).points;
+        const earned = nextKey === "Earth" ? 10000 : comboReward(count).points;
         comboRef.current = { count, time: now, bodyId: merged.id };
         setCombo(count);
         const id = merged.id;
-        setBursts(previous => [...previous.slice(-8), { id, x: merged.position.x, y: merged.position.y, color: nodeFor(nextKey).color, count, earth: nextKey === "ABCDE", earned }]);
+        setBursts(previous => [...previous.slice(-8), { id, x: merged.position.x, y: merged.position.y, color: nodeFor(nextKey).color, count, earth: nextKey === "Earth", earned }]);
         burstTimers.current.push(window.setTimeout(() => setBursts(previous => previous.filter(burst => burst.id !== id)), 1000));
-        playMergeSound(nextKey === "ABCDE" ? "earth" : nextKey.length === 1 || Boolean(fusions[nextKey]) ? "region" : "step");
+        playMergeSound(nextKey === "Earth" ? "earth" : climateChain.indexOf(nextKey) >= 3 ? "region" : "step");
         scoreRef.current += earned;
         setScore(scoreRef.current);
       }
@@ -844,14 +812,15 @@ function ClimateMerge() {
   const drop = (event: PointerEvent<HTMLDivElement>) => {
     const rect = boardRef.current?.getBoundingClientRect();
     if (!rect) return;
-    if (!readyRef.current || endedRef.current || !engineRef.current) return;
+    if (!readyRef.current || endedRef.current || atlasOpen || helpOpen || rankOpen || !engineRef.current) return;
     comboRef.current = { count: 0, time: 0, bodyId: null };
     setCombo(0);
     const radius = nodeFor(nextKey).size / 2;
     const x = Math.max(basketInset + radius, Math.min(gameWidth - basketInset - radius, ((event.clientX - rect.left) / rect.width) * gameWidth));
     Matter.Composite.add(engineRef.current.world, makeClimateBody(x, 42, nextKey));
     playMergeSound("drop");
-    setNextKey(randomDropKey(activeGroup));
+    const appendedKey = randomClimateKey();
+    setDropQueue(queue => [...queue.slice(1), appendedKey]);
     readyRef.current = false;
     setReady(false);
     if (dropDelayRef.current) window.clearTimeout(dropDelayRef.current);
@@ -864,22 +833,25 @@ function ClimateMerge() {
     const engine = engineRef.current;
     const runner = runnerRef.current;
     if (!engine || !runner) return;
+    Matter.Runner.stop(runner);
     Matter.Composite.clear(engine.world, false, true);
+    Matter.Engine.clear(engine);
     Matter.Composite.add(engine.world, wallsRef.current);
     enteredBasketRef.current.clear();
     if (gameOverTimer.current) window.clearTimeout(gameOverTimer.current);
     burstTimers.current.forEach(window.clearTimeout);
     burstTimers.current = [];
     comboRef.current = { count: 0, time: 0, bodyId: null };
-    setCombo(0); setBursts([]); setNextKey(randomDropKey(activeGroup));
+    setCombo(0); setBursts([]); setDropQueue(createClimateQueue());
     if (dropDelayRef.current) window.clearTimeout(dropDelayRef.current);
+    setClimateRunId(crypto.randomUUID());
     scoreRef.current = 0;
     endedRef.current = false;
     readyRef.current = true;
     lastSyncRef.current = 0;
     lastSafetyCheckRef.current = 0;
     setPieces([]); setScore(0); setGameOver(false); setReady(true);
-    Matter.Runner.run(runner, engine);
+    if (!atlasOpen && !helpOpen && !rankOpen) Matter.Runner.run(runner, engine);
   };
 
   return (
@@ -895,28 +867,18 @@ function ClimateMerge() {
             <p className="mt-1 text-xl font-black tabular-nums">점수 <span className="text-[#cf6349]">{score}</span></p>
           </div>
           <div className="arcade-controls">
+            <button type="button" onClick={() => setRankOpen(true)}>랭킹</button>
             <button type="button" aria-pressed={soundEnabled} onClick={() => { soundRef.current = !soundEnabled; setSoundEnabled(!soundEnabled); if (!soundEnabled) playMergeSound("step"); }}>{soundEnabled ? "♪ 소리 켜짐" : "♪ 소리 꺼짐"}</button>
-            <button type="button" onClick={resetGame}>↻ 다시 시작</button>
+            <button type="button" onClick={() => { if (score === 0 || window.confirm("현재 게임을 지우고 다시 시작할까요?")) resetGame(); }}>↻ 다시하기</button>
           </div>
         </header>
-        <section className="hidden">
-          <div>
-            <p className="font-mono text-[10px] font-bold tracking-[.18em] text-[#668861]">WORLD CLIMATE ATLAS · 01</p>
-            <h1 className="mt-2 text-3xl font-black tracking-[-.055em] sm:text-4xl">쾨펜 기후 합치기</h1>
-          </div>
-          <p className="max-w-sm text-xs leading-relaxed text-[#637565] sm:text-sm">기후 조각을 합쳐 보세요. 원하는 학습 단계 버튼을 눌러 조각에 표시되는 구분 정보를 바꿀 수 있어요.</p>
-        </section>
-        <nav aria-label="만들 기후 권역" className="climate-selector absolute right-3 top-1/2 z-[60] w-[76px] -translate-y-1/2 rounded-[20px] border border-white/60 bg-[#fffaf0]/95 p-1.5 shadow-[0_8px_24px_rgba(31,61,51,.22)] backdrop-blur sm:right-6 sm:w-[88px]">
-          <div className="grid grid-cols-1 gap-1.5">
-            {climateGroups.map((group) => (
-              <button key={group.id} type="button" onClick={() => setActivePrimary(group.id)} aria-pressed={activePrimary === group.id} className={`rounded-[16px] px-2 py-3 text-center transition ${activePrimary === group.id ? "bg-[#17342f] text-white shadow-[0_4px_0_#0e241e]" : "bg-[#f4f0e5] text-[#5d705c] hover:bg-[#e8efdF]"}`}>
-                <span className="block text-lg font-black leading-none">{group.id}</span>
-                <span className={`mt-1 block text-[9px] font-bold ${activePrimary === group.id ? "text-[#dff0d7]" : "text-[#7b8978]"}`}>{group.title}</span>
-              </button>
-            ))}
-          </div>
-          <button type="button" onClick={() => setAtlasOpen(true)} className="atlas-launch">⌘ 합성 지도</button>
-        </nav>
+
+        <button type="button" className="climate-chain-launch" onClick={() => setAtlasOpen(true)}>합성 순서 · 13단계</button>
+        <aside className="climate-next" aria-label="다음에 나올 기후 3개">
+          <p>NEXT <span>다음 기후</span></p>
+          <ol>{dropQueue.slice(1).map((key, index) => <li key={index}><small>{index + 1}</small><b>{key}</b><span>{nodeFor(key).name}</span></li>)}</ol>
+        </aside>
+
         <div className="h-full">
           <div className="climate-scene">
           <div className="outside-floor" aria-hidden="true"><span>바구니 밖 바닥 · 여기에 떨어지면 게임 오버</span></div>
@@ -970,36 +932,10 @@ function ClimateMerge() {
             </div>)}
           </section>
           </div>
-          <footer className="arcade-footer"><span>{activeGroup.chain.join(" → ")}</span><span>{combo > 0 ? comboReward(combo).label : "같은 공을 합쳐 지구를 만드세요"}</span></footer>
-          <aside className="hidden">
-            <p className="font-mono text-[10px] font-bold tracking-[.16em] text-[#668861]">NEXT CLIMATE</p>
-            <div className="mx-auto mt-5 grid h-28 w-28 place-items-center rounded-full border-4 border-white text-4xl shadow-[0_7px_0_rgba(28,72,62,.16),0_12px_18px_rgba(28,72,62,.12)]" style={{ backgroundColor: nodeFor(nextKey).color }}>{nodeFor(nextKey).icon}</div>
-            <p className="mt-3 text-center font-black">{nodeFor(nextKey).code} · {nodeFor(nextKey).name}</p>
-            <p className="mt-1 text-center text-[11px] text-[#6e806d]">같은 조각 2개를 합쳐 다음 단계로 진화</p>
-            <div className="mt-6 border-t border-[#e2d7ba] pt-5">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-bold">만들 기후 권역</p>
-                <span className="rounded-full bg-[#eaf1e3] px-2 py-1 font-mono text-[9px] font-bold text-[#51734f]">{activePrimary} ROUTE</span>
-              </div>
-              <div className="mt-3 rounded-xl bg-[#f1f5e9] px-3 py-2 text-[10px] leading-relaxed text-[#5f725c]">
-                <b>{activeGroup.title}</b> · {activeGroup.chain.join(" → ")} 순서로 합쳐 {activePrimary}를 만드세요. 만든 A–E는 서로 합쳐 새로운 지형이 됩니다.
-              </div>
-              <div className="mt-5 rounded-2xl border border-[#dce6d7] bg-[#f7faef] p-3 text-center">
-                <p className="text-xl">🌍</p>
-                <p className="mt-1 text-xs font-bold">A + B + C + D + E</p>
-                <p className="mt-1 text-[10px] text-[#657764]">지구 완성 보너스 · 10,000점</p>
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                resetGame();
-              }}
-              className="mt-6 w-full rounded-xl bg-[#17342f] py-3 text-sm font-bold text-white transition hover:bg-[#285346]"
-            >
-              {gameOver ? "다시 도전" : "새로 시작"}
-            </button>
-          </aside>
+          <footer className="arcade-footer"><span>Aw → Am → Af → BS → BW → Cfb → Cfa → Df → Dw → Ds → ET → EF → Earth</span><span>{combo > 0 ? comboReward(combo).label : "같은 공을 합쳐 지구를 만드세요"}</span></footer>
+
         </div>
+        {rankOpen && <Rankings recordId={climateRunId} game="climate" score={gameOver ? score : undefined} onClose={() => setRankOpen(false)} />}
         {atlasOpen && <ClimateAtlas onClose={() => setAtlasOpen(false)} />}
         <button type="button" className="help-launch" onClick={() => setHelpOpen(true)}>ⓘ 게임 설명</button>
         {helpOpen && <ClimateHelp onClose={() => setHelpOpen(false)} />}
@@ -1011,6 +947,7 @@ function ClimateMerge() {
               <p className="mt-3 text-sm leading-relaxed text-[#647565]">넘친 기후 공이 바구니 밖 바닥에 떨어졌어요.<br />같은 조각을 합쳐 공간을 만들어 보세요.</p>
               <p className="mt-6 font-mono text-sm font-bold">FINAL SCORE · {score}</p>
               <p className="mt-1 text-[11px] text-[#6e806d]">BEST · {highScoreRef.current}</p>
+              <button type="button" className="rank-action" onClick={() => setRankOpen(true)}>기록 등록 · 랭킹 보기</button>
               <button onClick={resetGame} className="mt-6 w-full rounded-xl bg-[#17342f] py-3 text-sm font-bold text-white transition hover:bg-[#285346]">다시 시작하기</button>
             </section>
           </div>
