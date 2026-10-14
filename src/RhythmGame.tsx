@@ -1,538 +1,265 @@
-import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import { rhythmSongs, type RhythmSong } from "./rhythmSongs";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router";
+import { lesson } from "./countries";
+import RhythmLibrary from "./RhythmLibrary";
+import { difficulties, type Difficulty, type Song } from "./songLibrary";
 
-type RhythmCountry = { code: string; korean: string; english: string };
-type Note = { id: number; lane: number; time: number; duration: number; country: RhythmCountry; state: "waiting" | "holding" | "done" };
-type Spark = { x: number; y: number; vx: number; vy: number; life: number; color: string };
-type Phase = "ready" | "playing" | "paused" | "finished";
-const colors = ["#dcf86e", "#60ebd4", "#ffb68f", "#baacff"];
-const keys = ["D", "F", "J", "K"];
-const defaultBindings = ["KeyD", "KeyF", "KeyJ", "KeyK"];
-const timing = { perfect: 0.11, good: 0.23, holdRelease: 0.16 };
-const validBinding = (code: string) => /^(Key[A-Z]|Digit[0-9]|Arrow(Left|Right|Up|Down)|Semicolon|Quote|Comma|Period|Slash|BracketLeft|BracketRight|Backslash|Minus|Equal)$/.test(code);
-const keyLabel = (code: string) => ({ ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓", Semicolon: ";", Quote: "'", Comma: ",", Period: ".", Slash: "/", BracketLeft: "[", BracketRight: "]", Backslash: "\\", Minus: "−", Equal: "=" }[code] ?? code.replace(/^(Key|Digit)/, ""));
+const initials = [..."ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"];
+const vowels = [..."ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ"];
+const finals = ["", ..."ㄱㄲㄳㄴㄵㄶㄷㄹㄺㄻㄼㄽㄾㄿㅀㅁㅂㅄㅅㅆㅇㅈㅊㅋㅌㅍㅎ"];
+const compounds: Record<string, string> = { ㄳ: "ㄱㅅ", ㄵ: "ㄴㅈ", ㄶ: "ㄴㅎ", ㄺ: "ㄹㄱ", ㄻ: "ㄹㅁ", ㄼ: "ㄹㅂ", ㄽ: "ㄹㅅ", ㄾ: "ㄹㅌ", ㄿ: "ㄹㅍ", ㅀ: "ㄹㅎ", ㅄ: "ㅂㅅ", ㅘ: "ㅗㅏ", ㅙ: "ㅗㅐ", ㅚ: "ㅗㅣ", ㅝ: "ㅜㅓ", ㅞ: "ㅜㅔ", ㅟ: "ㅜㅣ", ㅢ: "ㅡㅣ" };
+const keys: Record<string, string> = Object.fromEntries([..."ㅂㅈㄷㄱㅅㅛㅕㅑㅐㅔㅁㄴㅇㄹㅎㅗㅓㅏㅣㅋㅌㅊㅍㅠㅜㅡ"].map((letter, index) => [letter, "qwertyuiopasdfghjklzxcvbnm"[index]]));
+Object.assign(keys, { ㅃ: "Q", ㅉ: "W", ㄸ: "E", ㄲ: "R", ㅆ: "T", ㅒ: "O", ㅖ: "P" });
+type Note = { id: number; letter: string; key: string; lane: number; time: number; duration: number; country: string };
+type Results = { score: number; combo: number; best: number; perfect: number; good: number; miss: number; wrong: number };
+const emptyResults: Results = { score: 0, combo: 0, best: 0, perfect: 0, good: 0, miss: 0, wrong: 0 };
+const travelMs = 2200;
+const hitWindow = 180;
 
-function loadBindings(): string[] {
-  try {
-    const saved = JSON.parse(localStorage.getItem("geo-rhythm-keys") ?? "null");
-    if (Array.isArray(saved) && saved.length === 4 && saved.every(code => typeof code === "string" && validBinding(code)) && new Set(saved).size === 4) return saved;
-  } catch {}
-  return [...defaultBindings];
-}
-
-function makeChart(countries: RhythmCountry[], bpm = 100, offset = 0, songDuration?: number): Note[] {
-  if (!countries.length) return [];
-  const beat = 60 / bpm;
-  const first = songDuration ? offset + Math.ceil(Math.max(0, 3 - offset) / beat) * beat : 3;
-  const available = [0, 0, 0, 0];
-  const count = songDuration ? Math.min(1000, Math.max(0, Math.floor((songDuration - first - beat * 2 - 0.5) / beat) + 1)) : 64;
-  let order: RhythmCountry[] = [];
-  let previousCode: string | undefined;
-  return Array.from({ length: count }, (_, id) => {
-    if (id % countries.length === 0) {
-      order = [...countries];
-      for (let index = order.length - 1; index > 0; index -= 1) {
-        const swap = Math.floor(Math.random() * (index + 1));
-        [order[index], order[swap]] = [order[swap], order[index]];
-      }
-      if (order.length > 1 && order[0].code === previousCode) [order[0], order[1]] = [order[1], order[0]];
-    }
-    const time = first + id * beat;
-    let lane = (id * 7 + Math.floor(id / 4)) % 4;
-    while (available[lane] > time) lane = (lane + 1) % 4;
-    const duration = id % 7 === 4 ? beat * 2 : 0;
-    available[lane] = time + duration + beat * 0.5;
-    const country = order[id % countries.length];
-    previousCode = country.code;
-    return { id, lane, time, duration, country, state: "waiting" };
+function decompose(name: string) {
+  return [...name].flatMap(character => {
+    const code = character.charCodeAt(0) - 0xac00;
+    if (code < 0 || code >= 11172) return [];
+    return [initials[Math.floor(code / 588)], vowels[Math.floor(code / 28) % 21], finals[code % 28]].flatMap(letter => [...(compounds[letter] ?? letter)]);
   });
 }
 
-export default function RhythmGame({ countries }: { countries: RhythmCountry[] }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const audioRef = useRef<AudioContext | null>(null);
-  const musicRef = useRef<HTMLAudioElement | null>(null);
-  const musicUrlRef = useRef<string | null>(null);
-  const [song, setSong] = useState<{ name: string; duration: number } | null>(null);
-  const [bpm, setBpm] = useState(100);
-  const [offset, setOffset] = useState(0);
-  const [musicLoading, setMusicLoading] = useState(false);
-  const [musicError, setMusicError] = useState("");
-  const [selectedTrack, setSelectedTrack] = useState<string | null>(null);
-  const songCache = useRef(new Map<string, File>());
-  const songWorker = useRef<Worker | null>(null);
-  const songRequest = useRef(0);
-  useEffect(() => () => { songRequest.current += 1; songWorker.current?.terminate(); songWorker.current = null; }, []);
-  const musicConfig = useRef({ bpm, offset, song, loading: musicLoading });
-  musicConfig.current = { bpm, offset, song, loading: musicLoading };
-  const [phase, setPhase] = useState<Phase>("ready");
-  const [direction, setDirection] = useState<"down" | "up">("down");
-  const [speed, setSpeed] = useState(10);
-  const [sound, setSound] = useState(true);
-  const [bindings, setBindings] = useState(loadBindings);
-  const [rebinding, setRebinding] = useState<number | null>(null);
-  const [bindingHint, setBindingHint] = useState("버튼을 누른 뒤 원하는 키를 눌러주세요.");
-  const rebindingRef = useRef<number | null>(null);
-  useEffect(() => { try { localStorage.setItem("geo-rhythm-keys", JSON.stringify(bindings)); } catch {} }, [bindings]);
-  const [hud, setHud] = useState({ score: 0, combo: 0, best: 0, perfect: 0, good: 0, miss: 0, progress: 0 });
-  const [pressed, setPressed] = useState<boolean[]>([false, false, false, false]);
-  const settings = useRef({ direction, speed: speed / 10, sound, bindings });
-  settings.current = { direction, speed: speed / 10, sound, bindings };
-  useEffect(() => {
-    if (musicRef.current) { musicRef.current.playbackRate = speed / 10; musicRef.current.muted = !sound; }
-  }, [speed, sound]);
-  const frameTimeRef = useRef(performance.now());
-  const [initialNotes] = useState(() => makeChart(countries));
-  const game = useRef({ phase: "ready" as Phase, notes: initialNotes, firstActive: 0, time: 0, score: 0, combo: 0, best: 0, perfect: 0, good: 0, miss: 0, pressed: new Set<number>(), sources: new Map<string, number>(), sparks: [] as Spark[], flashes: [0, 0, 0, 0], judgment: "", judgmentAt: -10, lastBeat: -1, width: 640, height: 720 });
-  const sessionDuration = () => game.current.notes.at(-1) ? game.current.notes.at(-1)!.time + Math.max(3, game.current.notes.at(-1)!.duration + 0.5) : 1;
-  const inputTime = () => game.current.phase === "playing" && musicRef.current && musicConfig.current.song ? musicRef.current.currentTime : game.current.time + (game.current.phase === "playing" ? Math.max(0, Math.min(0.08, (performance.now() - frameTimeRef.current) / 1000)) * settings.current.speed : 0);
+function makeChart(spacing: number, song?: Song | null, difficulty: Difficulty = "easy") {
+  const countries = [...lesson];
+  for (let index = countries.length - 1; index > 0; index -= 1) {
+    const other = Math.floor(Math.random() * (index + 1));
+    [countries[index], countries[other]] = [countries[other], countries[index]];
+  }
+  const notes: Note[] = [];
+  const beatMs = song ? 60000 / song.bpm : spacing;
+  const firstBeat = (song?.offset ?? 0) * 1000;
+  let time = song ? firstBeat + Math.ceil(Math.max(0, 3000 - firstBeat) / beatMs) * beatMs : 3000;
+  const end = song ? song.duration * 1000 - 800 : Infinity;
+  const countryCount = song ? Math.ceil(song.duration * 1000 / spacing) : 5;
+  for (let countryIndex = 0; countryIndex < countryCount && time < end; countryIndex += 1) {
+    const country = countries[countryIndex % countries.length];
+    decompose(country.korean).forEach(letter => {
+      const longInterval = difficulty === "hard" ? 5 : difficulty === "normal" ? 7 : 10;
+      const duration = notes.length % (song ? longInterval : 6) === 3 ? beatMs * 2 : 0;
+      if (time + duration >= end) { time = end; return; }
+      notes.push({ id: notes.length, letter, key: keys[letter], lane: notes.length % 4, time, duration, country: country.korean });
+      time += spacing + duration;
+    });
+    time += song ? beatMs : spacing * 3;
+  }
+  return notes;
+}
 
-  const tone = (frequency: number, length = 0.12, volume = 0.04, type: OscillatorType = "sine") => {
-    const context = audioRef.current;
-    if (!context || context.state !== "running" || !settings.current.sound) return;
+export default function CountryRhythm() {
+  const [status, setStatus] = useState<"ready" | "playing" | "paused" | "finished">("ready");
+  const [spacing, setSpacing] = useState(600);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [clock, setClock] = useState(0);
+  const [results, setResults] = useState<Results>(emptyResults);
+  const [feedback, setFeedback] = useState("READY?");
+  const [sound, setSound] = useState(true);
+  const [direction, setDirection] = useState<"down" | "up">("down");
+  const [selectedSong, setSelectedSong] = useState<Song | null>(null);
+  const [difficulty, setDifficulty] = useState<Difficulty>("easy");
+  const [starting, setStarting] = useState(false);
+  const [playbackError, setPlaybackError] = useState("");
+  const [pulse, setPulse] = useState<{ id: number; lane: number; perfect: boolean } | null>(null);
+  const pulseId = useRef(0);
+  const stageRef = useRef<HTMLElement>(null);
+  const player = useRef<HTMLAudioElement | null>(null);
+  const elapsed = useRef(0);
+  const origin = useRef(0);
+  const judged = useRef(new Set<number>());
+  const holding = useRef(new Map<number, { perfect: boolean; source: string }>());
+  const audio = useRef<AudioContext | null>(null);
+  const beat = useRef(-1);
+  const approachMs = Math.max(1000, Math.min(travelMs, spacing * 18));
+  const selectSong = useCallback((song: Song, level: Difficulty) => { void start(song, level); }, [starting, sound, selectedSong, difficulty, spacing]);
+
+  function tone(frequency: number, volume = 0.035) {
+    if (!sound || !audio.current || audio.current.state !== "running") return;
+    const context = audio.current;
     const oscillator = context.createOscillator();
     const gain = context.createGain();
-    oscillator.type = type;
-    oscillator.frequency.setValueAtTime(frequency, context.currentTime);
+    oscillator.frequency.value = frequency;
     gain.gain.setValueAtTime(volume, context.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + length);
+    gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.07);
     oscillator.connect(gain).connect(context.destination);
-    oscillator.start();
-    oscillator.stop(context.currentTime + length);
-    oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
-  };
+    oscillator.start(); oscillator.stop(context.currentTime + 0.08);
+  }
 
-  const publish = () => {
-    const state = game.current;
-    setHud({ score: state.score, combo: state.combo, best: state.best, perfect: state.perfect, good: state.good, miss: state.miss, progress: Math.min(1, state.time / sessionDuration()) });
-  };
+  function gameTime() {
+    return player.current ? player.current.currentTime * 1000 : performance.now() - origin.current;
+  }
 
-  const judge = (lane: number, rating: "PERFECT" | "GOOD" | "MISS", hold = false) => {
-    const state = game.current;
-    state.judgment = hold ? "LONG PERFECT" : rating;
-    state.judgmentAt = performance.now();
-    if (rating === "MISS") { state.combo = 0; state.miss += 1; return; }
-    state.combo += 1;
-    state.best = Math.max(state.best, state.combo);
-    state.score += (rating === "PERFECT" ? 1000 : 500) + Math.min(state.combo, 100) * 10 + (hold ? 500 : 0);
-    if (rating === "PERFECT") state.perfect += 1; else state.good += 1;
-    state.flashes[lane] = 1;
-    const x = (lane + 0.5) * state.width / 4;
-    const y = state.height * (settings.current.direction === "down" ? 0.83 : 0.17);
-    for (let index = 0; index < (hold ? 38 : 24); index += 1) {
-      const angle = Math.random() * Math.PI * 2;
-      const velocity = 60 + Math.random() * 220;
-      state.sparks.push({ x, y, vx: Math.cos(angle) * velocity, vy: Math.sin(angle) * velocity, life: 1, color: colors[lane] });
+  async function start(song: Song | null = selectedSong, level: Difficulty = difficulty) {
+    if (starting) return;
+    setStarting(true); setPlaybackError("");
+    player.current?.pause(); player.current = null;
+    try { audio.current ??= new AudioContext(); void audio.current.resume().catch(() => {}); } catch {}
+    const nextSpacing = song ? (60000 / song.bpm) / difficulties.find(option => option.id === level)!.division : spacing;
+    if (song) {
+      const nextPlayer = new Audio(song.url);
+      nextPlayer.volume = 0.7; nextPlayer.muted = !sound;
+      try { await nextPlayer.play(); }
+      catch { setPlaybackError("이 음원을 재생하지 못했어요. 파일 형식과 브라우저 재생 권한을 확인해주세요."); setStarting(false); return; }
+      player.current = nextPlayer;
+      nextPlayer.onerror = () => { nextPlayer.pause(); setPlaybackError("음원 재생이 중단됐어요. 다른 음원을 선택해주세요."); setStatus("paused"); };
+      nextPlayer.onended = () => setStatus("finished");
     }
-    state.sparks = state.sparks.slice(-240);
-    tone([523.25, 659.25, 783.99, 987.77][lane], hold ? 0.35 : 0.16, 0.055, "triangle");
-    if (hold) tone(1567.98, 0.4, 0.025);
-  };
+    setSelectedSong(song); setDifficulty(level); setSpacing(nextSpacing);
+    judged.current.clear(); holding.current.clear(); elapsed.current = 0; beat.current = -1;
+    setClock(0); setPulse(null); setResults({ ...emptyResults }); setFeedback("3 · 2 · 1");
+    setNotes(makeChart(nextSpacing, song, level)); setStatus("playing"); setStarting(false);
+    requestAnimationFrame(() => stageRef.current?.scrollIntoView({ block: "start", behavior: "auto" }));
+  }
 
-  const press = (lane: number, source: string) => {
-    const state = game.current;
-    if (state.phase !== "playing" || state.sources.has(source)) return;
-    state.sources.set(source, lane);
-    if (state.pressed.has(lane)) return;
-    state.pressed.add(lane);
-    setPressed(keys.map((_, index) => state.pressed.has(index)));
-    const now = inputTime();
-    let candidate: Note | undefined;
-    const window = timing.good * settings.current.speed;
-    for (let index = state.firstActive; index < state.notes.length; index += 1) {
-      const note = state.notes[index];
-      if (note.time > now + window) break;
-      if (note.lane !== lane || note.state !== "waiting" || Math.abs(note.time - now) > window) continue;
-      if (!candidate || Math.abs(note.time - now) < Math.abs(candidate.time - now)) candidate = note;
+  async function resume() {
+    setPlaybackError("");
+    try { await player.current?.play(); void audio.current?.resume(); setStatus("playing"); }
+    catch { setPlaybackError("재생을 이어가지 못했어요. 다시 시도해주세요."); }
+  }
+
+  function hit(key?: string, lane?: number) {
+    if (status !== "playing") return;
+    const now = gameTime();
+    const candidate = notes.filter(note => !judged.current.has(note.id) && !holding.current.has(note.id) && Math.abs(note.time - now) <= hitWindow && (key !== undefined ? note.key === key : note.lane === lane)).sort((first, second) => Math.abs(first.time - now) - Math.abs(second.time - now))[0];
+    if (!candidate) {
+      setFeedback("MISS · 타이밍 또는 키가 맞지 않아요");
+      setResults(previous => ({ ...previous, combo: 0, wrong: previous.wrong + 1 }));
+      return;
     }
-    if (!candidate) return;
-    const perfect = Math.abs(candidate.time - now) <= timing.perfect * settings.current.speed;
-    candidate.state = candidate.duration ? "holding" : "done";
-    judge(lane, perfect ? "PERFECT" : "GOOD");
-    publish();
-  };
+    const perfect = Math.abs(candidate.time - now) <= 80;
+    if (candidate.duration) {
+      holding.current.set(candidate.id, { perfect, source: key !== undefined ? `key:${key.toLowerCase()}` : `lane:${lane}` });
+      setFeedback("HOLD · 끝까지 눌러주세요");
+    } else reward(candidate, perfect);
+    tone(440 + candidate.lane * 110);
+  }
 
-  const release = (source: string) => {
-    const state = game.current;
-    const lane = state.sources.get(source);
-    if (lane === undefined) return;
-    state.sources.delete(source);
-    if ([...state.sources.values()].includes(lane)) return;
-    state.pressed.delete(lane);
-    setPressed(keys.map((_, index) => state.pressed.has(index)));
-    for (let index = state.firstActive; index < state.notes.length; index += 1) {
-      const note = state.notes[index];
-      if (note.time > inputTime() + timing.good * settings.current.speed) break;
-      if (note.lane !== lane || note.state !== "holding") continue;
-      note.state = "done";
-      const completed = inputTime() >= note.time + note.duration - timing.holdRelease * settings.current.speed;
-      judge(lane, completed ? "PERFECT" : "MISS", completed);
-    }
-    publish();
-  };
+  function reward(note: Note, perfect: boolean) {
+    if (judged.current.has(note.id)) return;
+    judged.current.add(note.id); holding.current.delete(note.id);
+    const points = (perfect ? 100 : 60) * (note.duration ? 2 : 1);
+    setFeedback(`${note.duration ? "LONG " : ""}${perfect ? "PERFECT" : "GOOD"} +${points}`);
+    setPulse({ id: ++pulseId.current, lane: note.lane, perfect });
+    setResults(previous => ({ ...previous, score: previous.score + points, combo: previous.combo + 1, best: Math.max(previous.best, previous.combo + 1), perfect: previous.perfect + Number(perfect), good: previous.good + Number(!perfect) }));
+  }
 
-  const start = () => {
-    if (musicConfig.current.loading) return;
-    rebindingRef.current = null;
-    setRebinding(null);
-    if (!audioRef.current) {
-      try { audioRef.current = new AudioContext(); } catch {}
-    }
-    void audioRef.current?.resume();
-    const state = game.current;
-    if (state.phase !== "paused") {
-      const config = musicConfig.current;
-      const notes = makeChart(countries, config.bpm, config.offset, config.song?.duration);
-      if (!notes.length) { setMusicError("곡이 너무 짧거나 첫 박자 위치가 너무 늦어요. 다른 곡 또는 시작 위치를 선택하세요."); return; }
-      Object.assign(state, { notes, firstActive: 0, time: 0, score: 0, combo: 0, best: 0, perfect: 0, good: 0, miss: 0, lastBeat: -1, judgment: "", sparks: [], flashes: [0, 0, 0, 0] });
-      if (musicRef.current) musicRef.current.currentTime = 0;
-      state.sources.clear();
-      state.pressed.clear();
-      setPressed([false, false, false, false]);
-    }
-    state.phase = "playing";
-    frameTimeRef.current = performance.now();
-    setPhase("playing");
-    const music = musicRef.current;
-    if (music && musicConfig.current.song) {
-      music.playbackRate = settings.current.speed;
-      music.muted = !settings.current.sound;
-      void music.play().catch(() => { if (musicRef.current !== music || game.current.phase !== "playing") return; game.current.phase = "paused"; setPhase("paused"); setMusicError("음악을 재생하지 못했어요. 이어하기를 눌러 다시 시도하세요."); });
-    }
-    publish();
-  };
-
-  const pause = () => {
-    if (game.current.phase !== "playing") return;
-    game.current.phase = "paused";
-    musicRef.current?.pause();
-    setPhase("paused");
-  };
-
-  const resetSongSession = () => {
-    pause();
-    musicRef.current?.pause();
-    game.current.phase = "ready";
-    Object.assign(game.current, { time: 0, score: 0, combo: 0, best: 0, perfect: 0, good: 0, miss: 0, judgment: "", sparks: [], flashes: [0, 0, 0, 0] });
-    game.current.sources.clear(); game.current.pressed.clear();
-    setPressed([false, false, false, false]);
-    setPhase("ready");
-    publish();
-  };
-
-  const clearMusic = () => {
-    songRequest.current += 1;
-    resetSongSession();
-    const music = musicRef.current;
-    if (music) { music.onloadedmetadata = null; music.onerror = null; music.removeAttribute("src"); music.load(); }
-    musicRef.current = null;
-    if (musicUrlRef.current) URL.revokeObjectURL(musicUrlRef.current);
-    musicUrlRef.current = null;
-    setSong(null); setMusicLoading(false); setMusicError("");
-    setSelectedTrack(null);
-  };
-
-  const selectMusic = (file?: File, trackId?: string) => {
-    if (!file) return;
-    if (file.size > 50 * 1024 * 1024) { setMusicError("50MB 이하의 음악 파일을 선택하세요."); return; }
-    if (!file.type.startsWith("audio/") && !/\.(mp3|wav|ogg|m4a|aac|flac|opus)$/i.test(file.name)) { setMusicError("MP3, WAV 등 음악 파일을 선택하세요."); return; }
-    clearMusic();
-    setSelectedTrack(trackId ?? null);
-    setMusicLoading(true);
-    const url = URL.createObjectURL(file);
-    const music = new Audio();
-    musicUrlRef.current = url; musicRef.current = music;
-    music.preload = "auto";
-    music.onloadedmetadata = () => {
-      if (musicRef.current !== music) return;
-      if (!Number.isFinite(music.duration) || music.duration < 6) { clearMusic(); setMusicError("6초 이상의 음악 파일을 선택하세요."); return; }
-      setSong({ name: file.name, duration: music.duration }); setMusicLoading(false);
-    };
-    music.onerror = () => { if (musicRef.current !== music) return; clearMusic(); setMusicError("이 브라우저에서 읽을 수 없는 음악입니다. MP3 또는 WAV로 다시 시도하세요."); };
-    music.src = url;
-  };
-
-  const selectBuiltin = (track: RhythmSong) => {
-    clearMusic();
-    setBpm(track.bpm);
-    setOffset(0);
-    const cached = songCache.current.get(track.id);
-    if (cached) { selectMusic(cached, track.id); return; }
-    setMusicLoading(true);
-    const request = ++songRequest.current;
-    const acceptSong = (file: File) => {
-      if (songRequest.current !== request) return;
-      songCache.current.set(track.id, file);
-      selectMusic(file, track.id);
-    };
-    try {
-      if (typeof Worker === "undefined") {
-        void import("./rhythmSongs").then(module => {
-          if (songRequest.current === request) acceptSong(module.createRhythmSong(track));
-        }).catch(() => { if (songRequest.current === request) { setMusicLoading(false); setMusicError("기본곡을 준비하지 못했어요. 음악 파일을 사용해 주세요."); } });
-        return;
+  function release(source: string, cancelled = false) {
+    const now = status === "playing" ? gameTime() : elapsed.current;
+    for (const [id, hold] of holding.current) {
+      if (hold.source !== source) continue;
+      const note = notes[id];
+      if (!cancelled && now >= note.time + note.duration - 100) reward(note, hold.perfect);
+      else {
+        holding.current.delete(id); judged.current.add(id);
+        setFeedback("LONG MISS · 너무 일찍 뗐어요");
+        setResults(previous => ({ ...previous, combo: 0, miss: previous.miss + 1 }));
       }
-      const worker = songWorker.current ?? new Worker(new URL("./rhythmSongWorker.ts", import.meta.url), { type: "module" });
-      songWorker.current = worker;
-      worker.onmessage = (event: MessageEvent<{ request: number; file?: File; error?: string }>) => {
-        if (event.data.request !== request || songRequest.current !== request) return;
-        if (event.data.file) acceptSong(event.data.file);
-        else { setMusicLoading(false); setMusicError("기본곡을 준비하지 못했어요. 다시 선택하거나 음악 파일을 사용해 주세요."); }
-      };
-      worker.onerror = () => {
-        worker.terminate(); songWorker.current = null;
-        if (songRequest.current === request) { setMusicLoading(false); setMusicError("기본곡을 준비하지 못했어요. 다시 선택해 주세요."); }
-      };
-      worker.postMessage({ request, trackId: track.id });
-    } catch { setMusicLoading(false); setMusicError("기본곡을 준비하지 못했어요. 음악 파일을 사용해 주세요."); }
-  };
+    }
+  }
 
-  const actions = useRef({ press, release, pause, start });
-  actions.current = { press, release, pause, start };
+  function pause() {
+    for (const hold of holding.current.values()) release(hold.source, true);
+    player.current?.pause();
+    elapsed.current = gameTime();
+    setStatus("paused");
+  }
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const context = canvas.getContext("2d");
-    if (!context) return;
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const laneGradients = new Map<string, CanvasGradient>();
-    const noteSprites = new Map<string, HTMLCanvasElement>();
-    let pixelRatio = 1;
-    let idleSignature = "";
-    const resize = () => {
-      const rect = canvas.getBoundingClientRect();
-      const ratio = Math.min(window.devicePixelRatio || 1, 2);
-      pixelRatio = ratio;
-      canvas.width = Math.round(rect.width * ratio);
-      canvas.height = Math.round(rect.height * ratio);
-      game.current.width = rect.width;
-      game.current.height = rect.height;
-      context.setTransform(ratio, 0, 0, ratio, 0, 0);
-      laneGradients.clear();
-      noteSprites.clear();
-      idleSignature = "";
+    if (status !== "playing") return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (!/^Key[A-Z]$/.test(event.code)) return;
+      event.preventDefault();
+      const letter = event.code.slice(3);
+      hit(event.shiftKey ? letter : letter.toLowerCase());
     };
-    const observer = new ResizeObserver(resize);
-    observer.observe(canvas);
-    resize();
-    const refreshFonts = () => { noteSprites.clear(); idleSignature = ""; };
-    document.fonts.addEventListener("loadingdone", refreshFonts);
-    let frame = 0;
-    let previous = performance.now();
-    let published = previous;
-    let rendered = 0;
-    const draw = (now: number) => {
-      const elapsed = Math.min((now - previous) / 1000, 0.08);
-      previous = now;
-      frameTimeRef.current = now;
-      const state = game.current;
-      const { width, height } = state;
-      const laneWidth = width / 4;
-      const down = settings.current.direction === "down";
-      const target = height * (down ? 0.83 : 0.17);
-      const travel = height * 0.7 / 2.4;
-      const beat = 60 / musicConfig.current.bpm;
-      if (state.phase === "playing") {
-        if (musicRef.current && musicConfig.current.song) state.time = musicRef.current.currentTime;
-        else state.time += elapsed * settings.current.speed;
-        const currentBeat = Math.floor(state.time / beat);
-        if (currentBeat !== state.lastBeat && !musicConfig.current.song) {
-          state.lastBeat = currentBeat;
-          tone(currentBeat % 4 === 0 ? 110 : 220, 0.09, currentBeat % 4 === 0 ? 0.065 : 0.025, "triangle");
-          if (currentBeat % 2 === 0) tone([261.63, 329.63, 392, 293.66][Math.floor(currentBeat / 8) % 4], 0.27, 0.025);
-        }
-        for (let index = state.firstActive; index < state.notes.length; index += 1) {
-          const note = state.notes[index];
-          if (note.time > state.time + timing.good * settings.current.speed) break;
-          if (note.state === "waiting" && state.time > note.time + timing.good * settings.current.speed) { note.state = "done"; judge(note.lane, "MISS"); }
-          if (note.state === "holding") {
-            if (!state.pressed.has(note.lane)) { note.state = "done"; judge(note.lane, "MISS"); }
-            else if (state.time >= note.time + note.duration) { note.state = "done"; judge(note.lane, "PERFECT", true); }
-          }
-        }
-        while (state.firstActive < state.notes.length && state.notes[state.firstActive].state === "done") state.firstActive += 1;
-        if (state.time >= sessionDuration() || musicRef.current?.ended) { state.phase = "finished"; musicRef.current?.pause(); setPhase("finished"); publish(); }
-      }
-      if (now - rendered < 1000 / 60 - 0.5) { frame = requestAnimationFrame(draw); return; }
-      const signature = `${width}:${height}:${down}:${state.phase}:${settings.current.bindings.join(",")}:${[...state.pressed].join(",")}`;
-      const animating = state.sparks.length > 0 || state.flashes.some(flash => flash > 0) || now - state.judgmentAt < 750;
-      if (state.phase !== "playing" && !animating && idleSignature === signature) { frame = requestAnimationFrame(draw); return; }
-      const renderElapsed = Math.min((now - (rendered || now)) / 1000, 0.08);
-      rendered = now;
-      idleSignature = animating ? "" : signature;
-      context.clearRect(0, 0, width, height);
-      context.fillStyle = "#0d231f";
-      context.fillRect(0, 0, width, height);
-      for (let lane = 0; lane < 4; lane += 1) {
-        const x = lane * laneWidth;
-        const gradientKey = `${down}:${lane}:${state.pressed.has(lane)}`;
-        let glow = laneGradients.get(gradientKey);
-        if (!glow) {
-          glow = context.createLinearGradient(0, down ? height : 0, 0, down ? 0 : height);
-          glow.addColorStop(0, colors[lane] + (state.pressed.has(lane) ? "40" : "0c"));
-          glow.addColorStop(1, colors[lane] + "00");
-          laneGradients.set(gradientKey, glow);
-        }
-        context.fillStyle = glow;
-        context.fillRect(x, 0, laneWidth, height);
-        context.strokeStyle = "#ffffff12";
-        context.beginPath(); context.moveTo(x, 0); context.lineTo(x, height); context.stroke();
-        state.flashes[lane] = Math.max(0, state.flashes[lane] - renderElapsed * 2.8);
-        if (state.flashes[lane] > 0) {
-          context.save(); context.globalAlpha = state.flashes[lane] * 0.5;
-          context.fillStyle = colors[lane]; context.fillRect(x, target - 5, laneWidth, 10);
-          context.strokeStyle = colors[lane]; context.lineWidth = 3;
-          context.beginPath(); context.arc(x + laneWidth / 2, target, (1 - state.flashes[lane]) * laneWidth * 0.8 + 10, 0, Math.PI * 2); context.stroke(); context.restore();
-        }
-      }
-      context.strokeStyle = "#ffffff09"; context.lineWidth = 1;
-      for (let offset = -2; offset < 8; offset += 1) {
-        const y = target + (down ? -1 : 1) * (offset * beat - state.time % beat) * travel;
-        context.beginPath(); context.moveTo(0, y); context.lineTo(width, y); context.stroke();
-      }
-      context.strokeStyle = "#ebf7d5"; context.lineWidth = 2;
-      context.beginPath(); context.moveTo(0, target); context.lineTo(width, target); context.stroke();
-      for (let lane = 0; lane < 4; lane += 1) {
-        const center = (lane + 0.5) * laneWidth;
-        const radius = Math.min(38, (laneWidth - 14) / 2);
-        const active = state.pressed.has(lane);
-        context.save();
-        context.fillStyle = "#0d231f";
-        context.beginPath(); context.arc(center, target, radius + 5, 0, Math.PI * 2); context.fill();
-        context.shadowColor = colors[lane]; context.shadowBlur = active && !reducedMotion ? 22 : 0;
-        context.fillStyle = colors[lane] + (active ? "45" : "10");
-        context.strokeStyle = colors[lane] + (active ? "ff" : "a0");
-        context.lineWidth = active ? 4 : 2;
-        context.beginPath(); context.arc(center, target, radius, 0, Math.PI * 2); context.fill(); context.stroke();
-        context.strokeStyle = colors[lane] + "35"; context.lineWidth = 1;
-        context.beginPath(); context.arc(center, target, Math.max(1, radius - 6), 0, Math.PI * 2); context.stroke();
-        context.shadowBlur = 0; context.fillStyle = colors[lane]; context.textAlign = "center";
-        context.font = '600 12px "JetBrains Mono", monospace';
-        context.fillText(keyLabel(settings.current.bindings[lane]), center, down ? target + radius + 16 : target - radius - 10);
-        context.restore();
-      }
-      const lookAhead = (down ? target + 40 : height - target + 40) / travel;
-      for (let index = state.firstActive; index < state.notes.length; index += 1) {
-        const note = state.notes[index];
-        if (note.time > state.time + lookAhead) break;
-        if (note.state === "done") continue;
-        const y = note.state === "holding" ? target : target + (down ? -1 : 1) * (note.time - state.time) * travel;
-        const tail = target + (down ? -1 : 1) * (note.time + note.duration - state.time) * travel;
-        if (Math.max(y, tail) < -35 || Math.min(y, tail) > height + 35) continue;
-        const radius = Math.min(38, (laneWidth - 14) / 2);
-        const noteWidth = radius * 2;
-        const x = (note.lane + 0.5) * laneWidth - radius;
-        if (note.duration) {
-          context.fillStyle = colors[note.lane] + (note.state === "holding" ? "88" : "35");
-          context.fillRect(x + noteWidth * 0.2, Math.min(y, tail), noteWidth * 0.6, Math.max(0, Math.abs(tail - y)));
-          context.strokeStyle = colors[note.lane]; context.lineWidth = 2;
-          context.strokeRect(x + noteWidth * 0.2, Math.min(y, tail), noteWidth * 0.6, Math.max(0, Math.abs(tail - y)));
-        }
-        const spriteKey = `${note.country.code}:${note.lane}:${radius}:${Boolean(note.duration)}:${note.state === "holding"}`;
-        let sprite = noteSprites.get(spriteKey);
-        const padding = 28;
-        const extent = noteWidth + padding * 2;
-        if (!sprite) {
-          sprite = document.createElement("canvas");
-          sprite.width = sprite.height = Math.ceil(extent * pixelRatio);
-          const paint = sprite.getContext("2d");
-          if (!paint) continue;
-          paint.scale(pixelRatio, pixelRatio);
-          const center = radius + padding;
-          paint.save(); paint.shadowColor = colors[note.lane]; paint.shadowBlur = note.state === "holding" ? 24 : 10;
-          paint.fillStyle = colors[note.lane]; paint.beginPath(); paint.arc(center, center, radius, 0, Math.PI * 2); paint.fill();
-          paint.strokeStyle = "#ffffffa0"; paint.lineWidth = 2; paint.stroke();
-          paint.fillStyle = "#ffffff45"; paint.beginPath(); paint.ellipse(center - radius * 0.35, center - radius * 0.48, radius * 0.32, radius * 0.16, -0.5, 0, Math.PI * 2); paint.fill(); paint.restore();
-          paint.fillStyle = "#122d25"; paint.textAlign = "center";
-          paint.font = `700 ${Math.max(9, Math.min(14, (noteWidth - 8) / note.country.korean.length))}px "IBM Plex Sans KR", sans-serif`;
-          paint.fillText(note.country.korean, center, center - 1, noteWidth - 8);
-          paint.font = '9px "JetBrains Mono", monospace';
-          paint.fillText(note.duration ? `${note.country.code} · HOLD` : note.country.code, center, center + 13);
-          if (noteSprites.size >= 48) noteSprites.delete(noteSprites.keys().next().value!);
-          noteSprites.set(spriteKey, sprite);
-        }
-        context.drawImage(sprite, x - padding, y - radius - padding, extent, extent);
-      }
-      let liveSparks = 0;
-      for (let index = 0; index < state.sparks.length; index += 1) {
-        const spark = state.sparks[index];
-        spark.life -= renderElapsed * 1.8;
-        if (spark.life <= 0) continue;
-        state.sparks[liveSparks] = spark;
-        liveSparks += 1;
-        spark.x += spark.vx * renderElapsed; spark.y += spark.vy * renderElapsed; spark.vy += renderElapsed * 160;
-        if (reducedMotion) continue;
-        context.globalAlpha = Math.max(0, spark.life); context.fillStyle = spark.color;
-        context.fillRect(spark.x, spark.y, 3 + spark.life * 3, 3 + spark.life * 3);
-      }
-      state.sparks.length = liveSparks;
-      context.globalAlpha = 1;
-      if (state.judgment && now - state.judgmentAt < 750) {
-        context.save(); context.textAlign = "center"; context.fillStyle = state.judgment === "MISS" ? "#ff9e9e" : "#efffaa";
-        context.shadowColor = context.fillStyle; context.shadowBlur = reducedMotion ? 0 : 18;
-        context.font = `800 ${Math.min(28, width / 15)}px "JetBrains Mono", monospace`;
-        context.fillText(state.judgment, width / 2, height * 0.46);
-        if (state.combo > 1) { context.font = '14px "JetBrains Mono", monospace'; context.fillText(`${state.combo} COMBO`, width / 2, height * 0.46 + 30); }
-        context.restore();
-      }
-      if (now - published > 100 && state.phase === "playing") { publish(); published = now; }
-      frame = requestAnimationFrame(draw);
+    window.addEventListener("keydown", onKey);
+    const onRelease = (event: KeyboardEvent) => {
+      if (/^Key[A-Z]$/.test(event.code)) release(`key:${event.code.slice(3).toLowerCase()}`);
     };
-    frame = requestAnimationFrame(draw);
-    const keyDown = (event: KeyboardEvent) => {
-      if (rebindingRef.current !== null) {
-        event.preventDefault();
-        if (event.repeat || event.isComposing) return;
-        if (event.code === "Escape") { rebindingRef.current = null; setRebinding(null); setBindingHint("키 변경을 취소했어요."); return; }
-        if (event.ctrlKey || event.metaKey || event.altKey || !validBinding(event.code)) { setBindingHint("문자·숫자·방향키·기호를 선택하세요. SPACE는 일시정지 전용이에요."); return; }
-        const lane = rebindingRef.current;
-        const next = [...settings.current.bindings];
-        const duplicate = next.indexOf(event.code);
-        if (duplicate >= 0 && duplicate !== lane) next[duplicate] = next[lane];
-        next[lane] = event.code;
-        settings.current.bindings = next;
-        setBindings(next);
-        rebindingRef.current = null; setRebinding(null);
-        setBindingHint(duplicate >= 0 && duplicate !== lane ? "이미 사용 중인 키는 서로 교환했어요." : "키 설정을 저장했어요. 다음에도 유지됩니다.");
-        return;
-      }
-      if ((event.target as HTMLElement)?.closest("button, input, select, textarea, a") || event.ctrlKey || event.metaKey || event.altKey) return;
-      const lane = settings.current.bindings.indexOf(event.code);
-      if (lane >= 0) { event.preventDefault(); if (!event.repeat) actions.current.press(lane, `key:${event.code}`); }
-      if (event.code === "Space") { event.preventDefault(); if (!event.repeat) { if (game.current.phase === "playing") actions.current.pause(); else actions.current.start(); } }
-    };
-    const keyUp = (event: KeyboardEvent) => { actions.current.release(`key:${event.code}`); };
-    const blur = () => { actions.current.pause(); game.current.sources.clear(); game.current.pressed.clear(); setPressed([false, false, false, false]); };
-    const visibility = () => { if (document.hidden) blur(); };
-    window.addEventListener("keydown", keyDown); window.addEventListener("keyup", keyUp); window.addEventListener("blur", blur); document.addEventListener("visibilitychange", visibility);
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); document.fonts.removeEventListener("loadingdone", refreshFonts); noteSprites.clear(); laneGradients.clear(); window.removeEventListener("keydown", keyDown); window.removeEventListener("keyup", keyUp); window.removeEventListener("blur", blur); document.removeEventListener("visibilitychange", visibility); if (musicRef.current) { musicRef.current.pause(); musicRef.current.onloadedmetadata = null; musicRef.current.onerror = null; musicRef.current.removeAttribute("src"); musicRef.current.load(); } if (musicUrlRef.current) URL.revokeObjectURL(musicUrlRef.current); void audioRef.current?.close(); audioRef.current = null; };
-  }, []);
+    const onBlur = () => pause();
+    window.addEventListener("keyup", onRelease);
+    window.addEventListener("blur", onBlur);
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("keyup", onRelease); window.removeEventListener("blur", onBlur); };
+  }, [status, notes, sound]);
 
-  const accuracy = hud.perfect + hud.good + hud.miss ? Math.round((hud.perfect + hud.good * 0.5) / (hud.perfect + hud.good + hud.miss) * 100) : 100;
-  return (
-    <main className="rhythm-room">
-      <header className="rhythm-header"><Link to="/">← 게임 선택</Link><span>GEO PLAYROOM <i>/</i> 03</span><button onClick={() => setSound(!sound)} aria-pressed={sound}>♪ {sound ? "소리 켜짐" : "소리 꺼짐"}</button></header>
-      <div className="rhythm-layout">
-        <aside className="rhythm-settings">
-          <p className="rhythm-eyebrow">COUNTRY RHYTHM · {bpm} BPM</p><h1>세계를<br />리듬으로.</h1><p className="rhythm-description">익숙한 나라 이름, 새로운 비트.<br />판정선에 닿는 순간을 잡아보세요.</p>
-          <section className="rhythm-setting"><h2>01 <span>노트 방향</span></h2><div className="rhythm-toggle"><button aria-pressed={direction === "down"} onClick={() => setDirection("down")}>↓ 위에서 아래</button><button aria-pressed={direction === "up"} onClick={() => setDirection("up")}>↑ 아래에서 위</button></div></section>
-          <section className="rhythm-setting"><h2>02 <span>플레이 속도</span></h2><div className="rhythm-speed"><button aria-label="속도 0.1배 감소" disabled={speed === 5} onClick={() => setSpeed(value => Math.max(5, value - 1))}>−</button><strong>{(speed / 10).toFixed(1)}<small>×</small></strong><button aria-label="속도 0.1배 증가" disabled={speed === 20} onClick={() => setSpeed(value => Math.min(20, value + 1))}>+</button></div><input aria-label="플레이 속도" type="range" min={5} max={20} step={1} value={speed} onChange={event => setSpeed(Number(event.target.value))} /><div className="rhythm-range-label"><span>0.5× SLOW</span><span>2.0× FAST</span></div></section>
-          <section className="rhythm-setting rhythm-key-settings"><h2>03 <span>내 키 설정</span><button className="rhythm-key-reset" onClick={() => { pause(); game.current.sources.clear(); game.current.pressed.clear(); setPressed([false, false, false, false]); setBindings([...defaultBindings]); rebindingRef.current = null; setRebinding(null); setBindingHint("기본 키 D · F · J · K로 복원했어요."); }}>초기화</button></h2><div className="rhythm-key-buttons">{bindings.map((code, lane) => <button key={lane} className={rebinding === lane ? "is-listening" : ""} aria-label={`레인 ${lane + 1} 키 변경, 현재 ${keyLabel(code)}`} aria-pressed={rebinding === lane} onClick={() => { pause(); rebindingRef.current = lane; setRebinding(lane); setBindingHint(`${lane + 1}번 레인에 사용할 키를 누르세요. ESC로 취소.`); }}><small>{lane + 1}번</small><strong>{rebinding === lane ? "…" : keyLabel(code)}</strong></button>)}</div><p className="rhythm-key-hint" aria-live="polite">{bindingHint}</p><p className="rhythm-timing-hint">PERFECT ±110ms · GOOD ±230ms<br />롱노트 끝은 160ms 여유 있게!</p></section>
-          <section className="rhythm-setting rhythm-song-settings"><h2>04 <span>음악 선택</span></h2><div className="rhythm-builtin-tracks">{rhythmSongs.map(track => <button key={track.id} type="button" aria-pressed={selectedTrack === track.id} disabled={musicLoading} onClick={() => selectBuiltin(track)}><span className="rhythm-track-icon">{selectedTrack === track.id ? "♫" : "▷"}</span><span><strong>{track.title}</strong><small>{track.subtitle}</small></span><span className="rhythm-track-meta">{track.bpm} BPM<small>{track.tag}</small></span></button>)}</div><p className="rhythm-song-caption">기본곡은 바로 선택! BPM과 박자 위치가 자동 설정됩니다.<br />클래식 2곡은 직접 만든 편곡, World Groove는 오리지널입니다.</p><label className="rhythm-song-upload">♫ {musicLoading ? "음악 불러오는 중…" : "음악 파일 선택"}<input type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac,.opus" disabled={musicLoading} onChange={event => { selectMusic(event.target.files?.[0]); event.target.value = ""; }} /></label><p className="rhythm-song-name">{song ? `${song.name} · ${Math.floor(song.duration / 60)}:${Math.floor(song.duration % 60).toString().padStart(2, "0")}` : "기본 아케이드 비트"}</p><div className="rhythm-song-fields"><label>BPM<input type="number" min={40} max={240} step={1} value={bpm} onChange={event => { resetSongSession(); setBpm(Math.max(40, Math.min(240, Number(event.target.value) || 100))); }} /></label><label>첫 박자 위치 (초)<input type="number" min={0} max={10} step={0.1} value={offset} disabled={!song} onChange={event => { resetSongSession(); setOffset(Math.max(0, Math.min(10, Number(event.target.value) || 0))); }} /></label></div>{song && <button className="rhythm-song-clear" onClick={clearMusic}>간단한 기본 비트로 돌아가기</button>}<p className="rhythm-key-hint">내 파일도 계속 사용할 수 있어요. 파일 선택 시 BPM과 첫 박자를 직접 맞춰 주세요. 자동 비트 분석이나 곡 공유는 지원하지 않습니다.</p>{musicError && <p className="rhythm-song-error" role="alert">{musicError}</p>}</section>
-          <p className="rhythm-live-note"><span /> 방향과 속도는 플레이 중에도 변경 가능</p>
-        </aside>
-        <section className="rhythm-machine" aria-label="나라 리듬게임 플레이 영역">
-          <div className="rhythm-machine-top"><span><i /> {phase === "playing" ? "ON AIR" : "READY TO PLAY"}</span><span>{game.current.notes.length} NOTES / 4 LANES</span></div>
-          <div className="rhythm-track"><canvas ref={canvasRef} onPointerDown={event => { if (game.current.phase !== "playing") return; event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); const lane = Math.max(0, Math.min(3, Math.floor((event.clientX - rect.left) / rect.width * 4))); event.currentTarget.setPointerCapture(event.pointerId); press(lane, `track:${event.pointerId}`); }} onPointerUp={event => release(`track:${event.pointerId}`)} onPointerCancel={event => release(`track:${event.pointerId}`)} onLostPointerCapture={event => release(`track:${event.pointerId}`)} aria-label={`나라 이름 노트. ${bindings.map(keyLabel).join(", ")} 또는 아래 터치 버튼으로 연주하세요.`} />
-            {phase !== "playing" && <div className="rhythm-overlay"><p>{phase === "finished" ? "SESSION COMPLETE" : phase === "paused" ? "TAKE A BREATH" : "YOUR WORLD, YOUR BEAT"}</p><h2>{phase === "finished" ? "멋진 여행이었어요!" : phase === "paused" ? "잠시 쉬어가기" : "준비됐나요?"}</h2><span>{phase === "finished" ? `${hud.score.toLocaleString()}점 · 정확도 ${accuracy}% · 최대 ${hud.best}콤보` : `${bindings.map(keyLabel).join(" · ")}로 비트를 맞춰요. 긴 노트는 꾹!`}</span><button onClick={start} disabled={musicLoading}>{phase === "finished" ? "↻ 다시 플레이" : phase === "paused" ? "▶ 이어서 플레이" : "▶ 리듬 시작"}</button><small>SPACE로 시작 / 일시정지</small></div>}
-          </div>
-          <div className="rhythm-pads">{bindings.map((code, lane) => <button key={lane} className={`rhythm-pad rhythm-lane-${lane} ${pressed[lane] ? "is-pressed" : ""}`} aria-label={`${keyLabel(code)} 레인 누르기. 롱노트는 길게 누르세요.`} onPointerDown={event => { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); press(lane, `pointer:${event.pointerId}`); }} onPointerUp={event => release(`pointer:${event.pointerId}`)} onPointerCancel={event => release(`pointer:${event.pointerId}`)} onLostPointerCapture={event => release(`pointer:${event.pointerId}`)}><span>{keyLabel(code)}</span><small>TAP / HOLD</small></button>)}</div>
-          <div className="rhythm-transport"><span>{Math.round(hud.progress * 100)}% <i>WORLD TOUR</i></span><button onClick={phase === "playing" ? pause : start}>{phase === "playing" ? "Ⅱ 일시정지" : phase === "paused" ? "▶ 이어하기" : "▶ 시작"}</button></div><div className="rhythm-progress"><span style={{ width: `${hud.progress * 100}%` }} /></div>
-        </section>
-        <aside className="rhythm-results"><section className="rhythm-score"><p className="rhythm-eyebrow">LIVE SCORE</p><strong>{hud.score.toLocaleString().padStart(6, "0")}</strong><div><span>정확도 <b>{accuracy}%</b></span><span>최대 콤보 <b>{hud.best}</b></span></div></section><section className="rhythm-combo"><span>CURRENT COMBO</span><strong>{hud.combo.toString().padStart(2, "0")}</strong><p>한 박자씩, 더 멀리.</p></section><div className="rhythm-judgments"><p><span>✦ PERFECT</span><b>{hud.perfect}</b></p><p><span>◆ GOOD</span><b>{hud.good}</b></p><p><span>· MISS</span><b>{hud.miss}</b></p></div><section className="rhythm-how"><h2>손끝으로 떠나는 여행</h2><p><b>짧은 노트</b> 판정선에 닿으면 톡!</p><p><b>롱노트</b> 끝까지 누르고 있어요.</p><p><b>모바일</b> 판정 링이 있는 레인이나 아래 패드를 터치해요.</p><span>♪ 비트와 타격음이 함께 재생됩니다.</span></section></aside>
-      </div><footer className="rhythm-footer"><span>COUNTRIES FROM COUNTRY TYPING</span><span>작은 타이밍이 만드는 큰 즐거움.</span></footer>
-    </main>
-  );
+  useEffect(() => {
+    if (status !== "playing") { player.current?.pause(); return; }
+    origin.current = performance.now() - elapsed.current;
+    let frame = 0;
+    const animate = () => {
+      const now = gameTime();
+      elapsed.current = now; setClock(now);
+      for (const [id, hold] of holding.current) {
+        const note = notes[id];
+        if (now >= note.time + note.duration) reward(note, hold.perfect);
+      }
+      const missed = notes.filter(note => !judged.current.has(note.id) && !holding.current.has(note.id) && now > note.time + hitWindow);
+      if (missed.length) {
+        missed.forEach(note => judged.current.add(note.id));
+        setResults(previous => ({ ...previous, combo: 0, miss: previous.miss + missed.length }));
+        setFeedback("MISS");
+      }
+      const nextBeat = Math.floor(now / spacing);
+      if (nextBeat !== beat.current) { beat.current = nextBeat; if (!selectedSong) tone(nextBeat % 4 === 0 ? 220 : 150, 0.012); }
+      const finishTime = selectedSong ? selectedSong.duration * 1000 - 50 : notes.length ? notes[notes.length - 1].time + notes[notes.length - 1].duration + 600 : 0;
+      if (notes.length && now >= finishTime) { setStatus("finished"); return; }
+      frame = requestAnimationFrame(animate);
+    };
+    frame = requestAnimationFrame(animate);
+    const hide = () => { if (document.hidden) pause(); };
+    document.addEventListener("visibilitychange", hide);
+    return () => { cancelAnimationFrame(frame); document.removeEventListener("visibilitychange", hide); };
+  }, [status, notes, spacing, sound, selectedSong]);
+
+  useEffect(() => { if (player.current) player.current.muted = !sound; }, [sound]);
+  useEffect(() => () => { player.current?.pause(); player.current?.removeAttribute("src"); void audio.current?.close(); }, []);
+
+  const active = notes.find(note => note.time + note.duration + hitWindow >= clock) ?? notes[notes.length - 1];
+  const notePosition = (time: number) => direction === "down" ? 82 - (time - clock) / approachMs * 82 : 18 + (time - clock) / approachMs * 82;
+  const resolved = results.perfect + results.good + results.miss;
+  const accuracy = resolved + results.wrong ? Math.round((results.perfect + results.good) / (resolved + results.wrong) * 100) : 100;
+
+  return <main className="rhythm-room min-h-screen px-4 py-6 sm:px-8"><div className="mx-auto max-w-5xl">
+    <header className="flex items-center justify-between gap-3"><Link to="/" className="rounded-full border border-white/25 px-4 py-2 text-sm">← 게임 선택</Link><button onClick={() => setSound(value => !value)} className="rounded-full border border-white/25 px-4 py-2 text-xs" aria-pressed={sound}>♪ 소리 {sound ? "ON" : "OFF"}</button></header>
+    <div className="mt-7 flex flex-wrap items-end justify-between gap-4"><div><p className="rhythm-accent font-mono text-xs tracking-widest">COUNTRY RHYTHM / 두벌식 리듬 연습</p><h1 className="mt-2 text-3xl font-bold sm:text-4xl">나라를 한 음씩 연주하다.</h1></div><p className="font-mono text-xl">{results.score.toLocaleString()} <span className="text-xs opacity-60">POINTS</span></p></div>
+    <div hidden={status === "playing" || status === "paused"}>
+      <RhythmLibrary disabled={starting} onPlay={selectSong} />
+    </div>
+    {selectedSong && <div className="song-now-playing mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl px-4 py-3"><div className="min-w-0"><p className="break-words text-sm font-bold">♪ {selectedSong.title}</p><p className="mt-1 text-xs opacity-65">{selectedSong.artist || "내 음원"} · {selectedSong.bpm} BPM · {difficulties.find(option => option.id === difficulty)?.label}</p></div><span className="font-mono text-xs">{Math.floor(clock / 60000)}:{String(Math.floor(clock / 1000) % 60).padStart(2, "0")} / {Math.floor(selectedSong.duration / 60)}:{String(Math.floor(selectedSong.duration % 60)).padStart(2, "0")}</span></div>}
+    {playbackError && <p role="alert" className="mt-3 rounded-xl border border-red-300/40 p-3 text-sm text-red-200">{playbackError}</p>}
+    <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_280px]">
+      <div className="flex flex-wrap items-center gap-3 lg:col-span-2"><span className="text-xs opacity-70">노트 진행 방향</span><div className="flex gap-2">{(["down", "up"] as const).map(mode => <button key={mode} className="rhythm-direction rounded-full border border-white/25 px-4 py-2 text-xs" aria-pressed={direction === mode} onClick={() => setDirection(mode)}>{mode === "down" ? "↓ 위에서 아래로" : "↑ 아래에서 위로"}</button>)}</div><span className="text-xs opacity-60">연주 중에도 변경 가능 · 꼬리 노트는 길게 누르기</span></div>
+      <section ref={stageRef} className="rhythm-play-area"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><p className="text-lg font-bold">{active?.country ?? "다섯 나라, 하나의 리듬"}</p><span className="rhythm-accent font-mono text-sm">{results.combo} COMBO · {results.score.toLocaleString()}점</span></div>
+        <div className="rhythm-stage relative overflow-hidden rounded-2xl">
+          <div className="absolute inset-0 grid grid-cols-4">{[0, 1, 2, 3].map(lane => <div key={lane} className="rhythm-lane" />)}</div>
+          {status === "playing" && notes.filter(note => !judged.current.has(note.id) && note.time - clock < approachMs && (holding.current.has(note.id) || note.time - clock > -hitWindow)).map(note => {
+            const held = holding.current.has(note.id);
+            const head = notePosition(held ? clock : note.time);
+            const tail = notePosition(note.time + note.duration);
+            return <div key={note.id}>
+              {note.duration > 0 && <div className="rhythm-longtail" data-held={held} style={{ left: `${note.lane * 25 + 8}%`, top: `${Math.min(head, tail)}%`, height: `${Math.abs(head - tail)}%` }} />}
+              <div className="rhythm-note" data-held={held} data-kind={vowels.includes(note.letter) ? "vowel" : "consonant"} style={{ left: `${note.lane * 25 + 2}%`, top: `${head}%` }}><b>{note.letter}</b><span>{note.key === note.key.toUpperCase() ? `⇧ ${note.key}` : note.key.toUpperCase()}{note.duration > 0 && <small className="block text-[8px]">HOLD</small>}</span></div>
+            </div>;
+          })}
+          <div className="rhythm-hitline" style={{ top: direction === "down" ? "82%" : "18%" }}><span>HIT HERE</span></div>
+          {pulse && status === "playing" && <div key={pulse.id} className="rhythm-hit-effect" data-perfect={pulse.perfect} style={{ left: `${pulse.lane * 25 + 2}%`, top: direction === "down" ? "82%" : "18%" }}><span>{pulse.perfect ? "PERFECT" : "GOOD"}</span></div>}
+          <p className="rhythm-judgement absolute inset-x-0 bottom-3 text-center font-mono text-sm" aria-live="polite">{clock < 2000 && status === "playing" ? `${Math.max(1, Math.ceil((3000 - clock) / 1000))} · 준비` : feedback}</p>
+          {status !== "playing" && <div className="rhythm-overlay absolute inset-0 flex flex-col items-center justify-center gap-5 p-6 text-center">
+            <p className="font-mono text-xs tracking-widest">{status === "finished" ? "STAGE COMPLETE" : status === "paused" ? "PAUSED" : "READY TO PLAY"}</p>
+            <h2 className="text-3xl font-bold">{status === "finished" ? "연주 완료!" : status === "paused" ? "잠깐 쉬어가기" : "나라 이름이 리듬이 됩니다"}</h2>
+            {status === "ready" && !selectedSong && <label className="text-sm">기본 박자 연습 <select className="ml-3 rounded-lg bg-white/10 px-4 py-2" value={spacing} onChange={event => setSpacing(Number(event.target.value))}><option value={750}>천천히 · 80 BPM</option><option value={600}>보통 · 100 BPM</option><option value={400}>빠르게 · 150 BPM</option></select></label>}
+            {status === "finished" && <p className="text-sm leading-8">{results.score.toLocaleString()}점 · 정확도 {accuracy}%<br />최고 콤보 {results.best} · PERFECT {results.perfect}<br />GOOD {results.good} · MISS {results.miss} · 잘못 누름 {results.wrong}</p>}
+            <button disabled={starting} className="rhythm-start rounded-full px-8 py-3 font-bold" onClick={() => { if (status === "paused") void resume(); else void start(); }}>{starting ? "음원 준비 중…" : status === "paused" ? "이어 연주하기" : status === "finished" ? "다시 연주하기" : "기본 박자 연습 시작 →"}</button>
+            {(status === "paused" || status === "finished") && <button className="text-sm underline underline-offset-4" onClick={() => { player.current?.pause(); player.current = null; holding.current.clear(); setStatus("ready"); setSelectedSong(null); setSpacing(600); setNotes([]); setClock(0); setFeedback("READY?"); setPulse(null); }}>노래 보관함으로 돌아가기</button>}
+          </div>}
+        </div>
+        <div className="mt-3 grid grid-cols-4 gap-2">{[0, 1, 2, 3].map(lane => { const upcoming = notes.find(note => note.lane === lane && !judged.current.has(note.id) && note.time + note.duration + hitWindow >= clock); return <button key={lane} className="rhythm-pad touch-none rounded-xl py-3" disabled={status !== "playing"} data-held={notes.some(note => note.lane === lane && holding.current.has(note.id))} onPointerDown={event => { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); hit(undefined, lane); }} onPointerUp={() => release(`lane:${lane}`)} onPointerCancel={() => release(`lane:${lane}`, true)} onLostPointerCapture={() => release(`lane:${lane}`, true)} onKeyDown={event => { if ((event.key === " " || event.key === "Enter") && !event.repeat) { event.preventDefault(); hit(undefined, lane); } }} onKeyUp={event => { if (event.key === " " || event.key === "Enter") { event.preventDefault(); release(`lane:${lane}`); } }} aria-label={`${lane + 1}번 레인 ${upcoming?.letter ?? ""} 연주`}><b className="block text-xl">{upcoming?.letter ?? "·"}</b><span className="font-mono text-[10px] opacity-60">TAP {lane + 1}</span></button>; })}</div>
+      </section>
+      <aside className="rhythm-guide rounded-2xl p-6"><p className="rhythm-accent font-mono text-xs tracking-widest">HOW TO PLAY</p><h2 className="mt-4 text-xl font-bold">자음과 모음이<br />판정선에 닿을 때!</h2><div className="mt-5 space-y-4 text-sm leading-7 opacity-80"><p>타자연습의 전체 국가 목록에서 매번 5개 나라를 골라요. ‘일본’은 ㅇ → ㅣ → ㄹ → ㅂ → ㅗ → ㄴ 순서로 떨어져요.</p><p><b>PC</b> · 노트 아래 영문 키를 누르세요. ㅇ은 D, ㅣ는 L이에요. 한·영 입력 모드와 관계없이 작동해요. 쌍자음은 Shift와 함께 누르세요.</p><p><b>모바일</b> · 노트가 닿는 레인 아래의 TAP 버튼을 누르세요. 화면 키보드는 필요 없어요.</p><p><b>롱노트</b> · 꼬리가 달린 노트는 시작점에서 누른 뒤 꼬리 끝까지 유지하세요. 끝에 도달하면 자동 성공! 일반 노트의 두 배 점수예요. 일찍 떼거나 일시정지하면 진행 중인 롱노트는 MISS 처리돼요.</p><p>겹받침과 복합 모음은 실제 두벌식 입력 순서로 나눠요. ㅘ는 ㅗ → ㅏ, ㄺ은 ㄹ → ㄱ이에요.</p><p>PERFECT ±80ms · 100점<br />GOOD ±180ms · 60점<br />놓치거나 잘못 누르면 콤보가 끊겨요.</p></div><div className="mt-6 border-t border-white/15 pt-4 text-sm">정확도 <b>{accuracy}%</b> · 최고 콤보 <b>{results.best}</b></div>{status === "playing" && <button className="mt-5 w-full rounded-xl border border-white/25 py-3 text-sm" onClick={pause}>일시정지</button>}</aside>
+    </div>
+  </div></main>;
 }
