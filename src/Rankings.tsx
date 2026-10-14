@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { formatDuration, topRankings, type RankingEntry as Entry } from "./rankingRules";
 import { projectId, publicAnonKey } from "./utils/supabase/info";
 
-// info.tsx에 설정된 projectId와 publicAnonKey 사용
 const url = `https://${projectId}.supabase.co`;
 const apiKey = publicAnonKey;
 const shared = Boolean(projectId && apiKey);
@@ -122,7 +121,7 @@ export default function Rankings({ recordId, game, score, durationMs, accuracy =
     </form>}
     <p role="status" className="rank-message">{message}</p>
     <div className="rank-table-scroll" aria-busy={loading}><table><thead><tr><th>순위</th><th>닉네임</th><th>{game === "climate" ? "점수" : "완주 시간"}</th>{game !== "climate" && <th>정확도</th>}</tr></thead><tbody>
-      {entries.map((entry, index) => <tr key={entry.id}><td>{index + 1}</td><td>{entry.nickname}</td><td>{game === "climate" ? entry.score.toLocaleString() : formatDuration(entry.duration_ms!)}</td>{game !== "climate" && <td>{entry.accuracy}%</td>}</tr>)}
+      {entries.map((entry, index) => <tr key={entry.id}><td>{index + 1}</td><td>{entry.nickname}</td><td>{game === "climate" ? entry.score.toLocaleString() : formatDuration(entry.duration_ms!)}</td>{game !== "climate" && <td>{entry.accuracy}%</td>}</tr>\}}
     </tbody></table>{loading ? <p className="rank-empty">랭킹을 불러오는 중…</p> : !entries.length && !message && <p className="rank-empty">아직 등록된 기록이 없어요. 첫 번째 여행자가 되어보세요.</p>}</div>
     <p className="rank-description">닉네임은 계정이 아니며 중복될 수 있어요. 이 랭킹은 학습용으로, 공식 경쟁용 점수 검증은 제공하지 않습니다.</p>
   </dialog>;
