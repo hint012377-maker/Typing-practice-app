@@ -1,7 +1,9 @@
-import { ChangeEvent, lazy, memo, PointerEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, lazy, PointerEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createHashRouter, Link, RouterProvider } from "react-router";
 import Matter from "matter-js";
 import Rankings from "./Rankings";
+import { climatePoints, comboReward } from "./climateScoring";
+import CountryMap from "./CountryMap";
 import { additionalCountries, countryDataAttribution } from "./countries";
 
 const RhythmGame = lazy(() => import("./RhythmGame"));
@@ -96,52 +98,8 @@ function evaluateTyping(previous: string, value: string, target: string) {
   return { matched, wrong };
 }
 
-const mapUrl = (country: Country, isFixed: boolean, mapMode: "map" | "satellite") => {
-  const zoom = isFixed ? 2 : Math.min(country.zoom + 1, 10);
-  return `https://maps.google.com/maps?q=${country.lat},${country.lng}&z=${zoom}&t=${mapMode === "satellite" ? "k" : "m"}&output=embed&hl=ko`;
-};
-
-const CountryMapFrame = memo(function CountryMapFrame({ country, active, isFixedMap, mapMode }: {
-  country: Country;
-  active: boolean;
-  isFixedMap: boolean;
-  mapMode: "map" | "satellite";
-}) {
-  const [loaded, setLoaded] = useState(false);
-  return <>
-    <iframe src={mapUrl(country, isFixedMap, mapMode)} title={`${country.korean} 위치 지도`} onLoad={() => setLoaded(true)} aria-hidden={!active} tabIndex={active ? 0 : -1} className={`absolute inset-0 h-full w-full border-0 transition-opacity duration-300 ease-out ${active ? "z-10 opacity-100" : "pointer-events-none z-0 opacity-0"}`} loading="eager" />
-    {active && !loaded && <div className="pointer-events-none absolute left-1/2 top-5 z-20 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-semibold text-[#5d6e5f] shadow-sm">지도 불러오는 중</div>}
-  </>;
-});
-
-const MapFrames = memo(function MapFrames({
-  current,
-  next,
-  isFixedMap,
-  mapMode,
-}: {
-  current: Country;
-  next: Country;
-  isFixedMap: boolean;
-  mapMode: "map" | "satellite";
-}) {
-  const visibleCountries = [current, next];
-  return (
-    <>
-      {visibleCountries.map((country) => (
-        <CountryMapFrame
-          key={`${country.code}-${isFixedMap}-${mapMode}`}
-          country={country}
-          active={country.code === current.code}
-          isFixedMap={isFixedMap}
-          mapMode={mapMode}
-        />
-      ))}
-    </>
-  );
-});
-
 function CountryTyping() {
+  const [hardMode, setHardMode] = useState(false);
   const [rankOpen, setRankOpen] = useState(false);
   const [challenge, setChallenge] = useState(false);
   const startedAt = useRef(0);
@@ -168,10 +126,26 @@ function CountryTyping() {
   const composing = useRef(false);
   const committedInput = useRef("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const roomRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const resize = () => {
+      roomRef.current?.style.setProperty("--typing-viewport", `${viewport?.height ?? window.innerHeight}px`);
+      roomRef.current?.style.setProperty("--typing-offset", `${viewport?.offsetTop ?? 0}px`);
+    };
+    resize();
+    viewport?.addEventListener("resize", resize);
+    viewport?.addEventListener("scroll", resize);
+    window.addEventListener("resize", resize);
+    return () => {
+      viewport?.removeEventListener("resize", resize);
+      viewport?.removeEventListener("scroll", resize);
+      window.removeEventListener("resize", resize);
+    };
+  }, []);
   const advancing = useRef(false);
   const audioContext = useRef<AudioContext | null>(null);
   const current = session.order[index];
-  const next = index + 1 < session.order.length ? session.order[index + 1] : session.upcoming[0];
   const target = language === "ko" ? current.korean : current.english;
   useEffect(() => {
     try { localStorage.setItem("geo-typing-theme", theme); localStorage.setItem("geo-typing-map", mapMode); } catch {}
@@ -293,12 +267,12 @@ function CountryTyping() {
   const time = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(Math.floor(elapsed % 60)).padStart(2, "0")}`;
 
   return (
-    <main data-theme={theme} className="typing-room flex min-h-screen flex-col overflow-hidden">
-      {rankOpen && <Rankings recordId={typingRunId} game={`typing-${challenge ? rankLanguage : language}`} score={finished ? correct : undefined} durationMs={finished ? completionMs : undefined} accuracy={accuracy} onClose={() => setRankOpen(false)} />}
+    <main ref={roomRef} data-theme={theme} className="typing-room flex min-h-screen flex-col overflow-hidden">
+      {rankOpen && <Rankings recordId={typingRunId} game={`typing-${challenge ? rankLanguage : language}${hardMode ? "-hard" : ""}`} score={finished ? correct : undefined} durationMs={finished ? completionMs : undefined} accuracy={accuracy} onClose={() => setRankOpen(false)} />}
       <header className="typing-header flex min-h-16 shrink-0 items-center justify-between gap-3 px-5 py-3 sm:px-8">
         <div className="flex items-center gap-3">
-          <Link to="/" className="grid h-9 w-9 place-items-center rounded-[11px] bg-[#3b9d44] text-sm font-black text-white">
-            T
+          <Link to="/" className="game-back">
+            ← 게임 선택
           </Link>
           <div>
             <p className="text-sm font-bold">Country Typing</p>
@@ -310,9 +284,8 @@ function CountryTyping() {
           startedAt.current = performance.now(); setCompletionMs(undefined); setTypingRunId(crypto.randomUUID());
           setRankLanguage(language); setChallenge(true); setElapsed(0); setCorrect(0); setErrors(0); setMatchedCharacters(0); resetInput();
           const order = shuffleCountries(); setSession({ order, upcoming: shuffleCountries(order.at(-1)!.code), index: 0 });
-        }}>197개국 완주 도전</button></div>
+        }}><svg className="crown-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m3 6 5 4 4-7 4 7 5-4-2 12H5L3 6Z" /><path d="M5 21h14" /></svg>랭킹 도전하기</button></div>
         <div className="typing-theme" role="group" aria-label="화면 테마"><button type="button" aria-pressed={theme === "light"} onClick={() => setTheme("light")}>☀ 화이트</button><button type="button" aria-pressed={theme === "dark"} onClick={() => setTheme("dark")}>☾ 다크</button></div>
-        <p className="hidden font-mono text-[11px] text-[#778778] sm:block">LESSON 01 / WORLD MAP</p>
       </header>
       <section className="relative flex min-h-0 flex-1 flex-col">
         <div className="typing-progress flex items-center justify-between px-5 py-3 sm:px-10">
@@ -320,20 +293,21 @@ function CountryTyping() {
             {String(index + 1).padStart(2, "0")}{" "}
             <span className="font-normal text-[#95a295]">/ {typingLesson.length} 국가·지역 · 무작위</span>
           </p>
-          <p className="text-xs text-[#748174]">입력창을 터치하여 키보드를 여세요.</p>
+          <div className="typing-difficulty" role="group" aria-label="타자 난이도">{[false, true].map(hard => <button key={String(hard)} type="button" aria-pressed={hardMode === hard} disabled={challenge && !finished} onClick={() => {
+            setHardMode(hard); setChallenge(false); setCompletionMs(undefined); setTypingRunId(crypto.randomUUID());
+            setElapsed(0); setCorrect(0); setErrors(0); setMatchedCharacters(0); resetInput();
+            const order = shuffleCountries(); setSession({ order, upcoming: shuffleCountries(order.at(-1)!.code), index: 0 });
+          }}>{hard ? "하드모드" : "일반모드"}</button>)}</div>
         </div>
         <div className="typing-map relative z-0 h-[35vh] min-h-[220px] shrink-0 overflow-hidden sm:h-[48vh] sm:min-h-[340px]">
-          <MapFrames current={current} next={next} isFixedMap={isFixedMap} mapMode={mapMode} />
-          <div className="map-mode" role="group" aria-label="지도 보기 방식"><button type="button" aria-pressed={mapMode === "map"} onClick={() => setMapMode("map")}>◎ 지도</button><button type="button" aria-pressed={mapMode === "satellite"} onClick={() => setMapMode("satellite")}>◈ 위성</button><span>{current.code} · {current.lat.toFixed(1)}° / {current.lng.toFixed(1)}°</span></div>
-          <div className="pointer-events-none absolute bottom-5 left-1/2 z-30 hidden -translate-x-1/2 rounded-full bg-white/95 px-5 py-2 text-[11px] font-semibold text-[#5d6e5f] shadow-lg sm:block">
-            지도에서 나라의 윤곽과 주변 지역을 살펴보세요
-          </div>
+          <CountryMap country={current} isFixedMap={isFixedMap} mapMode={mapMode} hardMode={hardMode} />
+          {!hardMode && <div className="map-mode" role="group" aria-label="지도 보기 방식"><button type="button" aria-pressed={mapMode === "map"} onClick={() => setMapMode("map")}>◎ 지도</button><button type="button" aria-pressed={mapMode === "satellite"} onClick={() => setMapMode("satellite")}>◈ 위성</button><span>{current.code} · {current.lat.toFixed(1)}° / {current.lng.toFixed(1)}°</span></div>}
           <div className="absolute right-3 top-3 z-30 flex max-w-[calc(100%-24px)] flex-wrap justify-end gap-2 sm:right-10 sm:top-5">
             <button
               onClick={() => setIsFixedMap((value) => !value)}
               className="rounded-full bg-[#17231a] px-3 py-1.5 text-xs font-bold text-white shadow-md transition-colors hover:bg-[#2c3e2e]"
             >
-              {isFixedMap ? "🔍 상세 확대" : "🗺️ 넓은 지도"}
+              {isFixedMap ? "상세 확대" : "넓은 지도"}
             </button>
             <div className="flex rounded-full bg-white p-0.5 shadow-md">
               <button
@@ -373,9 +347,9 @@ function CountryTyping() {
           </div>
           <div className="mx-auto mt-4 max-w-3xl text-center sm:mt-5">
             <div className="typing-prompt py-2 sm:py-3" onClick={focusInput}>
-              <p className="typing-eyebrow">EXPLORE THE WORLD · {current.code}</p>
-              <p className="typing-target text-2xl font-bold tracking-[.1em] sm:text-5xl sm:tracking-[.15em]">{target}</p>
-              <div className="mt-2 flex flex-wrap justify-center gap-1.5 text-xl font-bold sm:mt-3 sm:gap-2 sm:text-3xl">
+              <p className="typing-eyebrow">EXPLORE THE WORLD{!hardMode && ` · ${current.code}`}</p>
+              <p className="typing-target text-2xl font-bold tracking-[.1em] sm:text-5xl sm:tracking-[.15em]">{hardMode ? "어느 나라일까요?" : target}</p>
+              {!hardMode && <div className="mt-2 flex flex-wrap justify-center gap-1.5 text-xl font-bold sm:mt-3 sm:gap-2 sm:text-3xl">
                 {Array.from(target).map((char, charIndex) => (
                   <span
                     key={`${char}-${charIndex}`}
@@ -390,8 +364,8 @@ function CountryTyping() {
                     {displayInput[charIndex] || char}
                   </span>
                 ))}
-              </div>
-              <p className="mt-1.5 text-[11px] font-medium tracking-wide text-[#829082] sm:mt-2 sm:text-xs">{current.english}</p>
+              </div>}
+              <p className="mt-1.5 text-[11px] font-medium tracking-wide text-[#829082] sm:mt-2 sm:text-xs">{hardMode ? `위치를 보고 ${language === "ko" ? "한국어" : "영어"}로 입력하세요` : current.english}</p>
             </div>
             <div className="mt-4 flex justify-center">
               <input
@@ -400,7 +374,7 @@ function CountryTyping() {
                 disabled={finished}
                 type="text"
                 onChange={handleChange}
-                aria-label={`${target} 나라 이름 입력`}
+                aria-label={hardMode ? "지도에 표시된 나라 이름 입력" : `${target} 나라 이름 입력`}
                 onCompositionStart={() => { composing.current = true; }}
                 onCompositionEnd={event => {
                   if (event.currentTarget !== inputRef.current || advancing.current) return;
@@ -417,6 +391,7 @@ function CountryTyping() {
                 spellCheck={false}
               />
             </div>
+            <p className="map-status" role="status">API 키 설정이 아직 적용되지 않아 하드모드에 나라 지도 사진으로 대체 했습니다.</p>
             {challenge && <p className="typing-caption" role="status">{finished ? `197개국 완주 · ${(completionMs! / 1000).toFixed(3)}초 · 정확도 ${accuracy}%` : `197개국 완주 도전 · ${correct} / 197 완료 · 도전 중 언어 변경 불가`}{finished && <button type="button" className="rank-action" onClick={() => setRankOpen(true)}>완주 기록 등록</button>}</p>}
             <p className="typing-caption">{typingLesson.length}개 국가·지역을 한 바퀴 동안 중복 없이 무작위로 연습해요 · 지도 모드는 유지돼요<br />한글은 조합이 끝난 글자만 채점해요 · <a href={countryDataAttribution.source} target="_blank" rel="noreferrer">국가 데이터: mledoze/countries</a> · <a href={countryDataAttribution.license} target="_blank" rel="noreferrer">ODbL</a></p>
           </div>
@@ -519,19 +494,13 @@ const climateNodes: Record<string, ClimateNode> = Object.fromEntries(climateChai
 }]));
 function nodeFor(key: string): ClimateNode { return climateNodes[key]; }
 
-function comboReward(count: number) {
-  const labels = ["Good!", "Great!", "Perfect!", "Excellent!", "Marvelous!!"];
-  const multiplier = Math.max(1, count - 4);
-  return { label: `${labels[Math.min(count, 5) - 1]}${count > 5 ? ` ×${multiplier}` : ""}`, points: count <= 5 ? count * 10 : 50 * multiplier };
-}
-
 function ClimateAtlas({ onClose }: { onClose: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   useEffect(() => { dialogRef.current?.showModal(); }, []);
   return <dialog ref={dialogRef} onCancel={onClose} className="climate-atlas" aria-labelledby="atlas-title">
     <header><div><p>CLIMATE EVOLUTION</p><h2 id="atlas-title">13단계 기후 합성 지도</h2></div><button autoFocus onClick={onClose}>닫기 ×</button></header>
     <p className="atlas-intro">같은 공 두 개만 합쳐집니다. 다른 기후 공은 합쳐지지 않으며, Earth는 마지막 단계입니다.</p>
-    <ol className="climate-evolution">{climateChain.map((key, index) => <li key={key}><b>{String(index + 1).padStart(2, "0")} · {key}</b><span>{nodeFor(key).name}</span><small>{index < 12 ? `${key} + ${key} → ${climateChain[index + 1]}` : "지구 완성 · +10,000점"}</small></li>)}</ol>
+    <ol className="climate-evolution">{climateChain.map((key, index) => <li key={key}><b>{String(index + 1).padStart(2, "0")} · {key}</b><span>{nodeFor(key).name} · {climatePoints[key].toLocaleString()}점</span><small>{index < 12 ? `${key} + ${key} → ${climateChain[index + 1]} · +${climatePoints[climateChain[index + 1]].toLocaleString()}점` : "지구 완성 · +10,000점"}</small></li>)}</ol>
     <p className="atlas-note">이 순서는 게임용 합성 규칙이며 실제 기후의 변화 순서를 뜻하지 않습니다.</p>
   </dialog>;
 }
@@ -542,15 +511,17 @@ function ClimateHelp({ onClose }: { onClose: () => void }) {
   return <dialog ref={dialogRef} onCancel={onClose} className="climate-atlas climate-help" aria-labelledby="help-title">
     <header><div><p>HOW TO PLAY</p><h2 id="help-title">작은 기후에서, 지구까지.</h2></div><button autoFocus type="button" onClick={onClose}>닫기 ×</button></header>
     <div className="help-steps">
-      <section><span>01</span><div><h3>위치를 고르고 톡!</h3><p>바구니 안을 누르면 기후 공이 떨어져요. 처음 세 단계인 Aw·Am·Af 중 하나가 무작위로 나와요.</p></div></section>
+      <section><span>01</span><div><h3>위치를 고르고 톡!</h3><p>바구니 안을 누르면 기후 공이 떨어져요. 처음 세 단계인 Aw·Am·Af 중 하나가 무작위로 나와요. 바구니는 왼쪽·가운데·오른쪽 세 구역으로 나뉘어요. 같은 구역에 두 번 연속 놓으면 그다음 공은 다른 구역에 놓아야 해요. 제한된 구역은 빗금으로 표시돼요.</p></div></section>
       <section><span>02</span><div><h3>같은 공을 만나게 해주세요</h3><p>같은 세부 기후 공 2개가 만나면 다음 단계로 진화해요. Aw부터 EF까지 순서대로 합쳐 마지막 Earth를 만드세요. 서로 다른 공은 합쳐지지 않아요. 전체 경로는 ‘합성 지도’에서 확인하세요.</p></div></section>
-      <section><span>03</span><div><h3>연쇄 합성으로 콤보!</h3><p>방금 만들어진 공이 <b>1.75초 안에 다시 합성</b>되면 콤보가 이어져요. 새 공을 떨어뜨리거나, 다른 공끼리 합성되거나, 시간이 지나면 콤보가 끊겨요.</p><p className="help-score">Good! 10점 → Great! 20점 → Perfect! 30점 → Excellent! 40점 → Marvelous!! 50점</p><p>그 다음은 Marvelous!! ×2 = 100점, ×3 = 150점… 지구 완성은 <b>10,000점</b>이에요.</p></div></section>
+      <section><span>03</span><div><h3>합성 점수 + 콤보 보너스</h3><p>완성된 공의 단계 점수를 받아요. Aw는 10점 기준이며, Aw 두 개를 합치면 Am 20점, 마지막 지구는 <b>10,000점</b>이에요. 공을 떨어뜨리는 것만으로는 점수를 받지 않아요.</p><p>방금 만들어진 공이 <b>1.5초 안에 다시 합성</b>되면 콤보가 이어져요. 새 공을 떨어뜨리거나, 다른 공끼리 합성되거나, 시간이 지나면 콤보가 끊겨요.</p><p className="help-score">Good! +25 → Great! +50 → Perfect! +100 → Excellent! +175 → Marvelous!! +250점</p><p>이후 보너스는 325, 400, 475점… 매번 <b>75점씩</b> 늘어나요. 배수로 증가하지 않으며, 지구에도 보너스는 별도로 더해져요.</p></div></section>
       <section><span>04</span><div><h3>넘치기 전에 공간을 만들어요</h3><p>공이 바구니 위로 넘쳐 바깥 바닥에 떨어지면 게임 오버! 옆벽에 닿는 것만으로 끝나지는 않아요. ‘♪ 소리’ 버튼으로 효과음을 켜거나 끌 수 있어요.</p></div></section>
     </div><p className="atlas-note">설명을 읽는 동안 게임은 일시정지돼요. 합성 순서는 학습 게임용이며 실제 기후 변화 과정이 아니에요.</p>
   </dialog>;
 }
 
 function ClimateMerge() {
+  const dropZoneRef = useRef({ zone: -1, count: 0 });
+  const [blockedZone, setBlockedZone] = useState(-1);
   const [pieces, setPieces] = useState<ClimatePiece[]>([]);
   const [climateRunId, setClimateRunId] = useState(() => crypto.randomUUID());
   const [dropQueue, setDropQueue] = useState(createClimateQueue);
@@ -721,7 +692,7 @@ function ClimateMerge() {
           }
         }
       }
-      if (comboRef.current.count > 0 && now - comboRef.current.time >= 1750) {
+      if (comboRef.current.count > 0 && now - comboRef.current.time >= 1500) {
         comboRef.current = { count: 0, time: 0, bodyId: null };
         setCombo(0);
       }
@@ -766,9 +737,9 @@ function ClimateMerge() {
         Matter.Composite.remove(engine.world, [a, b]);
         Matter.Composite.add(engine.world, merged);
         const now = performance.now();
-        const continuesChain = comboRef.current.count > 0 && now - comboRef.current.time < 1750 && (a.id === comboRef.current.bodyId || b.id === comboRef.current.bodyId);
+        const continuesChain = comboRef.current.count > 0 && now - comboRef.current.time < 1500 && (a.id === comboRef.current.bodyId || b.id === comboRef.current.bodyId);
         const count = continuesChain ? comboRef.current.count + 1 : 1;
-        const earned = nextKey === "Earth" ? 10000 : comboReward(count).points;
+        const earned = climatePoints[nextKey] + comboReward(count).points;
         comboRef.current = { count, time: now, bodyId: merged.id };
         setCombo(count);
         const id = merged.id;
@@ -813,10 +784,16 @@ function ClimateMerge() {
     const rect = boardRef.current?.getBoundingClientRect();
     if (!rect) return;
     if (!readyRef.current || endedRef.current || atlasOpen || helpOpen || rankOpen || !engineRef.current) return;
-    comboRef.current = { count: 0, time: 0, bodyId: null };
-    setCombo(0);
     const radius = nodeFor(nextKey).size / 2;
     const x = Math.max(basketInset + radius, Math.min(gameWidth - basketInset - radius, ((event.clientX - rect.left) / rect.width) * gameWidth));
+    const zone = Math.min(2, Math.max(0, Math.floor((x - basketInset) / (gameWidth - basketInset * 2) * 3)));
+    const previous = dropZoneRef.current;
+    if (previous.zone === zone && previous.count >= 2) return;
+    const count = previous.zone === zone ? previous.count + 1 : 1;
+    dropZoneRef.current = { zone, count };
+    setBlockedZone(count >= 2 ? zone : -1);
+    comboRef.current = { count: 0, time: 0, bodyId: null };
+    setCombo(0);
     Matter.Composite.add(engineRef.current.world, makeClimateBody(x, 42, nextKey));
     playMergeSound("drop");
     const appendedKey = randomClimateKey();
@@ -838,6 +815,8 @@ function ClimateMerge() {
     Matter.Engine.clear(engine);
     Matter.Composite.add(engine.world, wallsRef.current);
     enteredBasketRef.current.clear();
+    dropZoneRef.current = { zone: -1, count: 0 };
+    setBlockedZone(-1);
     if (gameOverTimer.current) window.clearTimeout(gameOverTimer.current);
     burstTimers.current.forEach(window.clearTimeout);
     burstTimers.current = [];
@@ -897,8 +876,9 @@ function ClimateMerge() {
             <div className="pointer-events-none absolute inset-x-[2.4%] top-[11.1%] z-30 h-5 rounded-full border border-[#fff5c9] bg-[linear-gradient(180deg,#fff5ce_0%,#efc573_48%,#c88d40_100%)] shadow-[inset_0_3px_2px_rgba(255,255,255,.75),0_4px_0_rgba(121,77,31,.22),0_10px_12px_rgba(123,80,31,.16)]" />
             <div className="pointer-events-none absolute inset-x-[5%] top-[12%] z-30 h-1 rounded-full bg-white/75" />
             <p className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2 whitespace-nowrap rounded-full border border-white/70 bg-[#fffdf5]/85 px-4 py-2 text-xs font-bold text-[#315c4f] shadow-sm">
-              {ready ? "위치를 고르고 눌러 조각을 떨어뜨리세요" : "조각이 착지하는 중…"}
+              {ready ? blockedZone >= 0 ? "같은 구역은 2회까지 · 다른 구역에 놓으세요" : "위치를 고르고 눌러 조각을 떨어뜨리세요" : "조각이 착지하는 중…"}
             </p>
+            {blockedZone >= 0 && <div className="climate-blocked-zone" style={{ left: `${(basketInset + blockedZone * (gameWidth - basketInset * 2) / 3) / gameWidth * 100}%`, width: `${(gameWidth - basketInset * 2) / 3 / gameWidth * 100}%` }}><span>이번 낙하 제한</span></div>}
             <p className="pointer-events-none absolute left-6 top-[11.5%] z-40 -translate-y-1/2 rounded-full bg-[#8d5626]/80 px-2 py-0.5 font-mono text-[8px] font-bold tracking-[.16em] text-white/90">BASKET RIM</p>
             <p className="pointer-events-none absolute bottom-[5%] left-7 z-20 font-mono text-[9px] tracking-[.22em] text-[#315c4f]/60">MERGE BASKET · CLIMATE BELTS</p>
             {ready && !gameOver && <div className="pointer-events-none absolute top-[38px] z-40 -translate-x-1/2" style={{ left: `${(previewX / gameWidth) * 100}%` }}><div className="h-10 border-l-2 border-dashed border-[#315c4f]/55" /><div className="relative grid h-12 w-12 -translate-x-[23px] place-items-center overflow-hidden rounded-full border-2 border-white/90 text-xs font-black text-[#17342f] shadow-[0_4px_0_rgba(35,78,64,.2)]" style={{ backgroundColor: nodeFor(nextKey).color }}><span className="absolute left-2 top-1 h-3 w-5 rotate-[-28deg] rounded-full bg-white/70" />{nodeFor(nextKey).code}</div></div>}
@@ -928,7 +908,7 @@ function ClimateMerge() {
             {bursts.map(burst => <div key={burst.id} className="merge-burst" style={{ left: `${burst.x / gameWidth * 100}%`, top: `${burst.y / gameHeight * 100}%`, color: burst.color }}>
               <span className="burst-ring" />
               {Array.from({ length: 10 }, (_, index) => <i key={index} style={{ '--angle': `${index * 36}deg` } as React.CSSProperties} />)}
-              <b>{burst.earth ? "🌍 지구 완성! +10,000" : `${comboReward(burst.count).label} +${burst.earned.toLocaleString()}`}</b>
+              <b>{burst.earth ? "지구 완성! " : ""}{comboReward(burst.count).label} +{burst.earned.toLocaleString()}</b>
             </div>)}
           </section>
           </div>
@@ -962,6 +942,7 @@ const router = createHashRouter([
   { path: "/typing", element: <CountryTyping /> },
   { path: "/climate", element: <ClimateMerge /> },
   { path: "/rhythm", element: <Suspense fallback={rhythmLoading}><RhythmGame countries={typingLesson} /></Suspense> },
+  { path: "/thythm", element: <Suspense fallback={rhythmLoading}><RhythmGame countries={typingLesson} /></Suspense> },
   { path: "/explore", element: <Suspense fallback={rhythmLoading}><RhythmGame countries={lesson} /></Suspense> },
   { path: "*", element: <Launcher /> },
 ]);
