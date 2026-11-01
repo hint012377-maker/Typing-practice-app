@@ -24,12 +24,12 @@ const seasons = [
 ] as const
 
 const randomSeasonLength = (random: () => number) =>
-  4 + Math.floor(random() * 4)
+  3 + Math.floor(random() * 8)
 
 function wind(random: () => number) {
   return {
     direction: random() < 0.5 ? -1 : 1,
-    speed: 1 + Math.floor(random() * 100),
+    speed: Math.floor(random() * 101),
   }
 }
 
@@ -59,12 +59,6 @@ export function weatherAfterDrop(
     ? (previous.seasonIndex + 1) % seasons.length
     : previous.seasonIndex
   const nextWind = wind(random)
-  if (
-    nextWind.direction === previous.direction &&
-    nextWind.speed === previous.speed
-  ) {
-    nextWind.speed = (nextWind.speed % 100) + 1
-  }
   return {
     ...seasons[seasonIndex],
     seasonIndex,
@@ -75,9 +69,9 @@ export function weatherAfterDrop(
   }
 }
 
-// 1–100 is a game intensity scale, not a real-world wind-speed unit.
+// 0 means calm; 1–100 is game intensity, not a real-world wind-speed unit.
 export function climateWindForce(
   weather: Pick<ClimateWeather, "direction" | "speed">,
 ) {
-  return weather.direction * weather.speed * 0.000006
+  return weather.speed === 0 ? 0 : weather.direction * weather.speed * 0.000006
 }
