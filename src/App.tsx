@@ -3,6 +3,7 @@ import { createHashRouter, Link, RouterProvider } from "react-router";
 import Matter from "matter-js";
 import Rankings from "./Rankings";
 import { climatePoints, comboReward } from "./climateScoring";
+import { createClimateWeather, weatherAfterDrop, climateWindForce, ICE_SCALE } from "./climateWeather";
 import CountryMap from "./CountryMap";
 import { additionalCountries, countryDataAttribution } from "./countries";
 
@@ -479,9 +480,16 @@ function Launcher() {
 }
 
 type Primary = "A" | "B" | "C" | "D" | "E";
-type ClimatePiece = { id: number; key: string; parts: Primary[]; x: number; y: number; angle: number };
-type ClimateBody = Matter.Body & { climateKey?: string; climateParts?: Primary[]; popped?: boolean; bornAt?: number; spilled?: boolean };
+type ClimatePiece = { id: number; key: string; parts: Primary[]; x: number; y: number; angle: number; frozen: boolean };
+type ClimateBody = Matter.Body & { climateKey?: string; climateParts?: Primary[]; popped?: boolean; bornAt?: number; spilled?: boolean; frozen?: boolean };
 type ClimateNode = { code: string; name: string; icon: string; color: string; size: number; next?: string };
+
+function setClimateFrozen(body: ClimateBody, frozen: boolean) {
+  if (Boolean(body.frozen) === frozen) return;
+  const scale = frozen ? ICE_SCALE : 1 / ICE_SCALE;
+  Matter.Body.scale(body, scale, scale);
+  body.frozen = frozen;
+}
 
 const climateChain = ["Aw", "Am", "Af", "BS", "BW", "Cfb", "Cfa", "Df", "Dw", "Ds", "ET", "EF", "Earth"];
 const randomClimateKey = () => climateChain[Math.floor(Math.random() * 3)];
@@ -511,17 +519,18 @@ function ClimateHelp({ onClose }: { onClose: () => void }) {
   return <dialog ref={dialogRef} onCancel={onClose} className="climate-atlas climate-help" aria-labelledby="help-title">
     <header><div><p>HOW TO PLAY</p><h2 id="help-title">작은 기후에서, 지구까지.</h2></div><button autoFocus type="button" onClick={onClose}>닫기 ×</button></header>
     <div className="help-steps">
-      <section><span>01</span><div><h3>위치를 고르고 톡!</h3><p>바구니 안을 누르면 기후 공이 떨어져요. 처음 세 단계인 Aw·Am·Af 중 하나가 무작위로 나와요. 바구니는 왼쪽·가운데·오른쪽 세 구역으로 나뉘어요. 같은 구역에 두 번 연속 놓으면 그다음 공은 다른 구역에 놓아야 해요. 제한된 구역은 빗금으로 표시돼요.</p></div></section>
+      <section><span>01</span><div><h3>위치를 고르고 톡!</h3><p>바구니 안을 누르면 기후 공이 떨어져요. 처음 세 단계인 Aw·Am·Af 중 하나가 무작위로 나와요. 같은 위치에도 계속 놓을 수 있지만, 바람 때문에 실제 착지 위치는 달라질 수 있어요.</p></div></section>
       <section><span>02</span><div><h3>같은 공을 만나게 해주세요</h3><p>같은 세부 기후 공 2개가 만나면 다음 단계로 진화해요. Aw부터 EF까지 순서대로 합쳐 마지막 Earth를 만드세요. 서로 다른 공은 합쳐지지 않아요. 전체 경로는 ‘합성 지도’에서 확인하세요.</p></div></section>
       <section><span>03</span><div><h3>합성 점수 + 콤보 보너스</h3><p>완성된 공의 단계 점수를 받아요. Aw는 10점 기준이며, Aw 두 개를 합치면 Am 20점, 마지막 지구는 <b>10,000점</b>이에요. 공을 떨어뜨리는 것만으로는 점수를 받지 않아요.</p><p>방금 만들어진 공이 <b>1.5초 안에 다시 합성</b>되면 콤보가 이어져요. 새 공을 떨어뜨리거나, 다른 공끼리 합성되거나, 시간이 지나면 콤보가 끊겨요.</p><p className="help-score">Good! +25 → Great! +50 → Perfect! +100 → Excellent! +175 → Marvelous!! +250점</p><p>이후 보너스는 325, 400, 475점… 매번 <b>75점씩</b> 늘어나요. 배수로 증가하지 않으며, 지구에도 보너스는 별도로 더해져요.</p></div></section>
       <section><span>04</span><div><h3>넘치기 전에 공간을 만들어요</h3><p>공이 바구니 위로 넘쳐 바깥 바닥에 떨어지면 게임 오버! 옆벽에 닿는 것만으로 끝나지는 않아요. ‘♪ 소리’ 버튼으로 효과음을 켜거나 끌 수 있어요.</p></div></section>
+      <section><span>05</span><div><h3>사계절과 자연환경을 읽어요</h3><p>공을 <b>4~7회</b> 놓을 때마다 봄 → 여름 → 가을 → 겨울 순서로 계절이 바뀌어요. 다음 계절까지의 횟수는 계절이 바뀔 때 새로 무작위로 정해져요. 가만히 기다리면 계절은 바뀌지 않아요.</p><p>공을 놓을 때마다 풍향과 <b>풍속 1~100</b>이 새로 정해져 낙하 중인 공을 옆으로 밀어요. 100이 가장 강하고, 바람 선의 방향과 빠르기도 실제 바람을 따라가요. 풍속은 게임용 강도이며 실제 풍속 단위가 아니에요.</p><p><b>겨울에 공을 놓을 때마다</b> 무작위 공 하나가 얼어요. 방금 떨어뜨린 공도 대상이며 <b>결빙 개수 제한은 없어요</b>. 얼음 공은 지름이 30% 커져 실제로 공간을 더 차지하고, 움직이지만 합성은 잠시 불가능해요. 봄에도 얼음이 유지되며, 다음 <b>여름에 원래 크기로 녹아</b> 다시 합쳐져요.</p></div></section>
     </div><p className="atlas-note">설명을 읽는 동안 게임은 일시정지돼요. 합성 순서는 학습 게임용이며 실제 기후 변화 과정이 아니에요.</p>
   </dialog>;
 }
 
 function ClimateMerge() {
-  const dropZoneRef = useRef({ zone: -1, count: 0 });
-  const [blockedZone, setBlockedZone] = useState(-1);
+  const [weather, setWeather] = useState(createClimateWeather);
+  const weatherRef = useRef(weather);
   const [pieces, setPieces] = useState<ClimatePiece[]>([]);
   const [climateRunId, setClimateRunId] = useState(() => crypto.randomUUID());
   const [dropQueue, setDropQueue] = useState(createClimateQueue);
@@ -610,10 +619,10 @@ function ClimateMerge() {
     lastSyncRef.current = now;
     const nextPieces = Matter.Composite.allBodies(engine.world)
         .filter((body): body is ClimateBody => !body.isStatic && Boolean((body as ClimateBody).climateKey))
-        .map((body) => ({ id: body.id, key: body.climateKey!, parts: body.climateParts ?? [], x: body.position.x, y: body.position.y, angle: body.angle }));
+        .map((body) => ({ id: body.id, key: body.climateKey!, parts: body.climateParts ?? [], x: body.position.x, y: body.position.y, angle: body.angle, frozen: Boolean(body.frozen) }));
     setPieces(previous => !force && previous.length === nextPieces.length && previous.every((piece, index) => {
       const next = nextPieces[index];
-      return piece.id === next.id && piece.key === next.key && Math.abs(piece.x - next.x) < 0.03 && Math.abs(piece.y - next.y) < 0.03 && Math.abs(piece.angle - next.angle) < 0.002;
+      return piece.id === next.id && piece.key === next.key && piece.frozen === next.frozen && Math.abs(piece.x - next.x) < 0.03 && Math.abs(piece.y - next.y) < 0.03 && Math.abs(piece.angle - next.angle) < 0.002;
     }) ? previous : nextPieces);
   }, []);
 
@@ -669,6 +678,19 @@ function ClimateMerge() {
       Matter.Runner.stop(runner);
     };
 
+    const onBeforeUpdate = () => {
+      if (endedRef.current) return;
+      const force = climateWindForce(weatherRef.current);
+      const bodies = Matter.Composite.allBodies(engine.world).filter(
+        (body): body is ClimateBody => Boolean((body as ClimateBody).climateKey) && !(body as ClimateBody).popped
+      );
+      for (const body of bodies) {
+        if (!body.spilled && body.position.y < basketBottom - (body.circleRadius ?? 0) - 4 && body.velocity.y > 0.4) {
+          Matter.Body.applyForce(body, body.position, { x: body.mass * force, y: 0 });
+        }
+      }
+    };
+
     const onAfterUpdate = () => {
       const now = performance.now();
       const climateBodies = Matter.Composite.allBodies(engine.world).filter(
@@ -696,17 +718,19 @@ function ClimateMerge() {
         comboRef.current = { count: 0, time: 0, bodyId: null };
         setCombo(0);
       }
-      if (now - lastSafetyCheckRef.current >= 80) lastSafetyCheckRef.current = now;
-      for (let index = 0; index < climateBodies.length; index += 1) {
-        for (let other = index + 1; other < climateBodies.length; other += 1) {
-          const a = climateBodies[index];
-          const b = climateBodies[other];
-          if (a.popped || b.popped) continue;
-          const horizontal = a.position.x - b.position.x;
-          const vertical = a.position.y - b.position.y;
-          const contactDistance = (a.circleRadius ?? 0) + (b.circleRadius ?? 0) + 0.6;
-          if (horizontal * horizontal + vertical * vertical <= contactDistance * contactDistance) {
-            onCollision({ pairs: [{ bodyA: a, bodyB: b }] } as unknown as Matter.IEventCollision<Matter.Engine>);
+      if (now - lastSafetyCheckRef.current >= 80) {
+        lastSafetyCheckRef.current = now;
+        for (let index = 0; index < climateBodies.length; index += 1) {
+          for (let other = index + 1; other < climateBodies.length; other += 1) {
+            const a = climateBodies[index];
+            const b = climateBodies[other];
+            if (a.popped || b.popped || a.frozen || b.frozen || a.climateKey !== b.climateKey) continue;
+            const horizontal = a.position.x - b.position.x;
+            const vertical = a.position.y - b.position.y;
+            const contactDistance = (a.circleRadius ?? 0) + (b.circleRadius ?? 0) + 0.6;
+            if (horizontal * horizontal + vertical * vertical <= contactDistance * contactDistance) {
+              onCollision({ pairs: [{ bodyA: a, bodyB: b }] } as unknown as Matter.IEventCollision<Matter.Engine>);
+            }
           }
         }
       }
@@ -720,7 +744,7 @@ function ClimateMerge() {
         const b = bodyB as ClimateBody;
         if ((a.label === "outside-ground" && b.spilled && !b.popped) || (b.label === "outside-ground" && a.spilled && !a.popped)) { endGame(); return; }
         if (a.isStatic || b.isStatic) continue;
-        if (!a.climateKey || !b.climateKey || a.popped || b.popped || a.spilled || b.spilled) continue;
+        if (!a.climateKey || !b.climateKey || a.popped || b.popped || a.spilled || b.spilled || a.frozen || b.frozen) continue;
         const nextKey = a.climateKey === b.climateKey ? climateNodes[a.climateKey]?.next : undefined;
         const nextParts: Primary[] = [];
         if (!nextKey) continue;
@@ -752,10 +776,12 @@ function ClimateMerge() {
     };
     Matter.Events.on(engine, "collisionStart", onCollision);
     Matter.Events.on(engine, "collisionActive", onCollision);
+    Matter.Events.on(engine, "beforeUpdate", onBeforeUpdate);
     Matter.Events.on(engine, "afterUpdate", onAfterUpdate);
     return () => {
       Matter.Events.off(engine, "collisionStart", onCollision);
       Matter.Events.off(engine, "collisionActive", onCollision);
+      Matter.Events.off(engine, "beforeUpdate", onBeforeUpdate);
       Matter.Events.off(engine, "afterUpdate", onAfterUpdate);
       if (dropDelayRef.current) window.clearTimeout(dropDelayRef.current);
       if (previewFrameRef.current) window.cancelAnimationFrame(previewFrameRef.current);
@@ -786,15 +812,32 @@ function ClimateMerge() {
     if (!readyRef.current || endedRef.current || atlasOpen || helpOpen || rankOpen || !engineRef.current) return;
     const radius = nodeFor(nextKey).size / 2;
     const x = Math.max(basketInset + radius, Math.min(gameWidth - basketInset - radius, ((event.clientX - rect.left) / rect.width) * gameWidth));
-    const zone = Math.min(2, Math.max(0, Math.floor((x - basketInset) / (gameWidth - basketInset * 2) * 3)));
-    const previous = dropZoneRef.current;
-    if (previous.zone === zone && previous.count >= 2) return;
-    const count = previous.zone === zone ? previous.count + 1 : 1;
-    dropZoneRef.current = { zone, count };
-    setBlockedZone(count >= 2 ? zone : -1);
     comboRef.current = { count: 0, time: 0, bodyId: null };
     setCombo(0);
-    Matter.Composite.add(engineRef.current.world, makeClimateBody(x, 42, nextKey));
+    const currentWeather = weatherAfterDrop(weatherRef.current);
+    weatherRef.current = currentWeather;
+    setWeather(currentWeather);
+    const dropped = makeClimateBody(x, 42, nextKey);
+    Matter.Composite.add(engineRef.current.world, dropped);
+    const climateBodies = Matter.Composite.allBodies(engineRef.current.world).filter(
+      (body): body is ClimateBody => Boolean((body as ClimateBody).climateKey) && !(body as ClimateBody).popped
+    );
+    if (currentWeather.id === "summer") {
+      climateBodies.forEach(body => setClimateFrozen(body, false));
+    } else if (currentWeather.id === "winter") {
+      const candidates = climateBodies.filter(body => !body.frozen && !body.spilled);
+      if (candidates.length) {
+        const target = candidates[Math.floor(Math.random() * candidates.length)];
+        setClimateFrozen(target, true);
+        const iceRadius = target.circleRadius ?? 0;
+        // Keep an expanding ice shell inside the basket; the solver separates neighbours.
+        Matter.Body.setPosition(target, {
+          x: Math.max(basketInset + iceRadius, Math.min(gameWidth - basketInset - iceRadius, target.position.x)),
+          y: Math.min(basketBottom - iceRadius, target.position.y),
+        });
+      }
+    }
+    syncPieces(true);
     playMergeSound("drop");
     const appendedKey = randomClimateKey();
     setDropQueue(queue => [...queue.slice(1), appendedKey]);
@@ -815,8 +858,8 @@ function ClimateMerge() {
     Matter.Engine.clear(engine);
     Matter.Composite.add(engine.world, wallsRef.current);
     enteredBasketRef.current.clear();
-    dropZoneRef.current = { zone: -1, count: 0 };
-    setBlockedZone(-1);
+    weatherRef.current = createClimateWeather();
+    setWeather(weatherRef.current);
     if (gameOverTimer.current) window.clearTimeout(gameOverTimer.current);
     burstTimers.current.forEach(window.clearTimeout);
     burstTimers.current = [];
@@ -857,10 +900,19 @@ function ClimateMerge() {
           <p>NEXT <span>다음 기후</span></p>
           <ol>{dropQueue.slice(1).map((key, index) => <li key={index}><small>{index + 1}</small><b>{key}</b><span>{nodeFor(key).name}</span></li>)}</ol>
         </aside>
+        <aside className="climate-weather" data-season={weather.id} aria-label="현재 계절과 자연환경">
+          <div className="climate-weather-heading"><strong>{weather.name}</strong><span>다음 계절까지 {weather.remainingDrops}회</span></div>
+          <div className="climate-seasons" aria-hidden="true">{["봄", "여름", "가을", "겨울"].map(name => <span key={name} className={name === weather.name ? "is-current" : ""}>{name}</span>)}</div>
+          <p><b className="climate-wind-reading"><svg viewBox="0 0 32 24" className={weather.direction < 0 ? "is-left" : ""} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 7h18c7 0 7-6 2-6M5 12h24m-5-4 5 4-5 4M2 17h14c7 0 7 6 2 6" /></svg><span>{weather.direction > 0 ? "→" : "←"} 풍속 <strong>{weather.speed}</strong><em>/100</em></span></b><span>얼음 {pieces.filter(piece => piece.frozen).length}개</span></p>
+          <div className="climate-wind-meter" role="meter" aria-label="풍속 (게임 강도)" aria-valuemin={1} aria-valuemax={100} aria-valuenow={weather.speed}><i style={{ width: `${weather.speed}%` }} /></div>
+          <small>{weather.description}</small>
+        </aside>
 
         <div className="h-full">
-          <div className="climate-scene">
+          <div className="climate-scene" data-season={weather.id} data-wind={weather.direction > 0 ? "right" : "left"} data-paused={atlasOpen || helpOpen || rankOpen || gameOver} style={{ "--wind-duration": `${4 - weather.speed * 0.032}s`, "--wind-opacity": 0.2 + weather.speed * 0.006, "--wind-width": `${8 + weather.speed * 0.16}%`, "--wind-travel": `${135 / (8 + weather.speed * 0.16) * 100}%` } as React.CSSProperties}>
           <div className="outside-floor" aria-hidden="true"><span>바구니 밖 바닥 · 여기에 떨어지면 게임 오버</span></div>
+          <div className="climate-weather-fx" aria-hidden="true">{Array.from({ length: 12 }, (_, index) => <i key={index} style={{ "--particle": index } as React.CSSProperties} />)}</div>
+          {weather.id === "winter" && <div className="climate-snow-fx" aria-hidden="true">{Array.from({ length: 12 }, (_, index) => <i key={index} style={{ "--particle": index } as React.CSSProperties} />)}</div>}
           <section
             ref={boardRef}
             onPointerMove={queuePreview}
@@ -876,9 +928,8 @@ function ClimateMerge() {
             <div className="pointer-events-none absolute inset-x-[2.4%] top-[11.1%] z-30 h-5 rounded-full border border-[#fff5c9] bg-[linear-gradient(180deg,#fff5ce_0%,#efc573_48%,#c88d40_100%)] shadow-[inset_0_3px_2px_rgba(255,255,255,.75),0_4px_0_rgba(121,77,31,.22),0_10px_12px_rgba(123,80,31,.16)]" />
             <div className="pointer-events-none absolute inset-x-[5%] top-[12%] z-30 h-1 rounded-full bg-white/75" />
             <p className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2 whitespace-nowrap rounded-full border border-white/70 bg-[#fffdf5]/85 px-4 py-2 text-xs font-bold text-[#315c4f] shadow-sm">
-              {ready ? blockedZone >= 0 ? "같은 구역은 2회까지 · 다른 구역에 놓으세요" : "위치를 고르고 눌러 조각을 떨어뜨리세요" : "조각이 착지하는 중…"}
+              {ready ? "바람을 읽고, 원하는 위치를 누르세요" : "조각이 착지하는 중…"}
             </p>
-            {blockedZone >= 0 && <div className="climate-blocked-zone" style={{ left: `${(basketInset + blockedZone * (gameWidth - basketInset * 2) / 3) / gameWidth * 100}%`, width: `${(gameWidth - basketInset * 2) / 3 / gameWidth * 100}%` }}><span>이번 낙하 제한</span></div>}
             <p className="pointer-events-none absolute left-6 top-[11.5%] z-40 -translate-y-1/2 rounded-full bg-[#8d5626]/80 px-2 py-0.5 font-mono text-[8px] font-bold tracking-[.16em] text-white/90">BASKET RIM</p>
             <p className="pointer-events-none absolute bottom-[5%] left-7 z-20 font-mono text-[9px] tracking-[.22em] text-[#315c4f]/60">MERGE BASKET · CLIMATE BELTS</p>
             {ready && !gameOver && <div className="pointer-events-none absolute top-[38px] z-40 -translate-x-1/2" style={{ left: `${(previewX / gameWidth) * 100}%` }}><div className="h-10 border-l-2 border-dashed border-[#315c4f]/55" /><div className="relative grid h-12 w-12 -translate-x-[23px] place-items-center overflow-hidden rounded-full border-2 border-white/90 text-xs font-black text-[#17342f] shadow-[0_4px_0_rgba(35,78,64,.2)]" style={{ backgroundColor: nodeFor(nextKey).color }}><span className="absolute left-2 top-1 h-3 w-5 rotate-[-28deg] rounded-full bg-white/70" />{nodeFor(nextKey).code}</div></div>}
@@ -887,11 +938,11 @@ function ClimateMerge() {
               return (
                 <div
                   key={piece.id}
-                  className="climate-ball pointer-events-none absolute z-20 grid place-items-center rounded-full border-[2px] border-white/85 shadow-[inset_6px_6px_8px_rgba(255,255,255,.3),inset_-7px_-8px_9px_rgba(35,75,61,.2)] will-change-transform"
+                  className={`climate-ball pointer-events-none absolute z-20 grid place-items-center rounded-full border-[2px] border-white/85 shadow-[inset_6px_6px_8px_rgba(255,255,255,.3),inset_-7px_-8px_9px_rgba(35,75,61,.2)] will-change-transform${piece.frozen ? " is-frozen" : ""}`}
                   style={{
                     left: `${(piece.x / gameWidth) * 100}%`,
                     top: `${(piece.y / gameHeight) * 100}%`,
-                    width: `${(climate.size / gameWidth) * 100}%`, aspectRatio: "1 / 1",
+                    width: `${(climate.size * (piece.frozen ? ICE_SCALE : 1) / gameWidth) * 100}%`, aspectRatio: "1 / 1",
                     backgroundColor: climate.color,
                     fontSize: `${climate.size / gameWidth * 48}cqw`,
                     transform: `translate(-50%, -50%) rotate(${piece.angle}rad)`,
@@ -902,6 +953,7 @@ function ClimateMerge() {
                   <span className="absolute bottom-[11%] right-[13%] h-[13%] w-[13%] rounded-full bg-white/30" />
                   <span className="relative font-black tracking-[-.04em] text-[#17342f] drop-shadow-[0_1px_0_rgba(255,255,255,.45)]" style={{ fontSize: `${climate.size / gameWidth * (climate.code.length > 3 ? 18 : 27)}cqw` }}>{climate.code}</span>
                   <span className="absolute bottom-[15%] text-[.55em] opacity-70">{climate.icon}</span>
+                  {piece.frozen && <span className="climate-ice-label">얼음</span>}
                 </div>
               );
             })}
