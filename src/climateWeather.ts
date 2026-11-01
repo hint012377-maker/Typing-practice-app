@@ -9,7 +9,7 @@ const seasons = [
   {
     id: "summer",
     name: "여름",
-    description: "해빙 · 모든 얼음이 녹아 다시 합쳐져요",
+    description: "해빙 · 놓을 때마다 무작위 얼음 공 최대 2개가 녹아요",
   },
   {
     id: "autumn",
@@ -33,7 +33,10 @@ function wind(random: () => number) {
   }
 }
 
-export type ClimateWeather = typeof seasons[number] & {
+export type ClimateWeather = Omit<typeof seasons[number], "name" | "description"> & {
+  name: string
+  description: string
+  isDeepWinter: boolean
   seasonIndex: number
   remainingDrops: number
   direction: number
@@ -43,6 +46,7 @@ export type ClimateWeather = typeof seasons[number] & {
 export function createClimateWeather(random = Math.random): ClimateWeather {
   return {
     ...seasons[0],
+    isDeepWinter: false,
     seasonIndex: 0,
     remainingDrops: randomSeasonLength(random),
     ...wind(random),
@@ -59,8 +63,16 @@ export function weatherAfterDrop(
     ? (previous.seasonIndex + 1) % seasons.length
     : previous.seasonIndex
   const nextWind = wind(random)
+  // A cold snap can begin on any winter drop and lasts until spring.
+  const isDeepWinter = seasons[seasonIndex].id === "winter" &&
+    ((!changesSeason && previous.isDeepWinter) || random() < 0.1)
   return {
     ...seasons[seasonIndex],
+    ...(isDeepWinter ? {
+      name: "한겨울",
+      description: "강추위 · 놓을 때마다 무작위 공 3개 결빙 · 여름에 해빙",
+    } : {}),
+    isDeepWinter,
     seasonIndex,
     remainingDrops: changesSeason
       ? randomSeasonLength(random)
