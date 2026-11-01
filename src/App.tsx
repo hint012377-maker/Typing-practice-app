@@ -6,6 +6,7 @@ import { climatePoints, comboReward } from "./climateScoring";
 import { createClimateWeather, weatherAfterDrop, climateWindForce, ICE_SCALE } from "./climateWeather";
 import CountryMap from "./CountryMap";
 import ClimateLandscape from "./ClimateLandscape";
+import ClimateWind from "./ClimateWind";
 import { climateScale } from "./climateScale";
 import { additionalCountries, countryDataAttribution } from "./countries";
 
@@ -525,7 +526,7 @@ function ClimateHelp({ onClose }: { onClose: () => void }) {
       <section><span>02</span><div><h3>같은 공을 만나게 해주세요</h3><p>같은 세부 기후 공 2개가 만나면 다음 단계로 진화해요. Aw부터 EF까지 순서대로 합쳐 마지막 Earth를 만드세요. 서로 다른 공은 합쳐지지 않아요. 전체 경로는 ‘합성 지도’에서 확인하세요.</p></div></section>
       <section><span>03</span><div><h3>합성 점수 + 콤보 보너스</h3><p>완성된 공의 단계 점수를 받아요. Aw는 10점 기준이며, Aw 두 개를 합치면 Am 20점, 마지막 지구는 <b>10,000점</b>이에요. 공을 떨어뜨리는 것만으로는 점수를 받지 않아요.</p><p>방금 만들어진 공이 <b>1.5초 안에 다시 합성</b>되면 콤보가 이어져요. 새 공을 떨어뜨리거나, 다른 공끼리 합성되거나, 시간이 지나면 콤보가 끊겨요.</p><p className="help-score">Good! +25 → Great! +50 → Perfect! +100 → Excellent! +175 → Marvelous!! +250점</p><p>이후 보너스는 325, 400, 475점… 매번 <b>75점씩</b> 늘어나요. 배수로 증가하지 않으며, 지구에도 보너스는 별도로 더해져요.</p></div></section>
       <section><span>04</span><div><h3>넘치기 전에 공간을 만들어요</h3><p>공이 바구니 위로 넘쳐 바깥 바닥에 떨어지면 게임 오버! 옆벽에 닿는 것만으로 끝나지는 않아요. ‘♪ 소리’ 버튼으로 효과음을 켜거나 끌 수 있어요.</p></div></section>
-      <section><span>05</span><div><h3>사계절과 자연환경을 읽어요</h3><p>공을 <b>3~10회</b> 놓을 때마다 봄 → 여름 → 가을 → 겨울 순서로 계절이 바뀌어요. 다음 계절까지의 횟수는 계절이 바뀔 때 새로 무작위로 정해져요. 가만히 기다리면 계절은 바뀌지 않아요.</p><p>공을 놓을 때마다 풍향과 <b>풍속 0~100</b>이 새로 정해져요. <b>0은 무풍</b>으로 공을 옆으로 미는 힘과 맵의 바람 효과가 사라져요. 100이 가장 강하고, 맵 안 기류의 방향·빠르기·밀도도 실제 바람을 따라가요. 풍속은 게임용 강도이며 실제 풍속 단위가 아니에요.</p><p><b>겨울에 공을 놓을 때마다</b> 무작위 공 하나가 얼어요. 방금 떨어뜨린 공도 대상이며 <b>결빙 개수 제한은 없어요</b>. 얼음 공은 지름이 30% 커져 실제로 공간을 더 차지하고, 움직이지만 합성은 잠시 불가능해요. 봄에도 얼음이 유지되며, 다음 <b>여름에 원래 크기로 녹아</b> 다시 합쳐져요.</p></div></section>
+      <section><span>05</span><div><h3>사계절과 자연환경을 읽어요</h3><p>공을 <b>3~10회</b> 놓을 때마다 봄 → 여름 → 가을 → 겨울 순서로 계절이 바뀌어요. 다음 계절까지의 횟수는 계절이 바뀔 때 새로 무작위로 정해져요. 가만히 기다리면 계절은 바뀌지 않아요.</p><p>공을 놓을 때마다 풍향과 <b>풍속 0~100</b>이 새로 정해져요. <b>0은 무풍</b>으로 공을 옆으로 미는 힘과 맵의 바람 효과가 사라져요. 100이 가장 강하고, 맵 안 기류의 방향·빠르기·밀도도 실제 바람을 따라가요. 풍속은 게임용 강도이며 실제 풍속 단위가 아니에요.</p><p><b>겨울에 공을 놓을 때마다</b> 무작위 공 하나가 얼어요. 겨울에는 놓을 때마다 <b>15% 확률로 한겨울</b>이 되어 봄까지 유지되고, 한겨울에는 <b>서로 다른 공 3개</b>가 무작위로 얼어요. 아직 얼지 않은 공이 3개보다 적으면 남은 공만 얼어요. 방금 떨어뜨린 공도 대상이며 <b>결빙 개수 제한은 없어요</b>. 얼음 공은 지름이 30% 커져 실제로 공간을 더 차지하고, 움직이지만 합성은 잠시 불가능해요. 봄에도 얼음이 유지되며, <b>여름에 공을 놓을 때마다</b> 얼음 공 중 무작위로 <b>최대 2개만 원래 크기로 녹아</b> 다시 합쳐져요. 얼음 공이 하나면 하나만 녹고, 여름이 끝나도 남아 있는 얼음은 유지돼요.</p></div></section>
     </div><p className="atlas-note">설명을 읽는 동안 게임은 일시정지돼요. 합성 순서는 학습 게임용이며 실제 기후 변화 과정이 아니에요. 점수가 오르면 바구니가 커지고 아래 지구·천체가 작아져요. 크기와 우주 배경은 게임용 연출이며 실제 축척이나 고도를 뜻하지 않아요.</p>
   </dialog>;
 }
@@ -826,11 +827,17 @@ function ClimateMerge() {
       (body): body is ClimateBody => Boolean((body as ClimateBody).climateKey) && !(body as ClimateBody).popped
     );
     if (currentWeather.id === "summer") {
-      climateBodies.forEach(body => setClimateFrozen(body, false));
+      const candidates = climateBodies.filter(body => body.frozen && !body.spilled);
+      const thawCount = Math.min(2, candidates.length);
+      for (let index = 0; index < thawCount; index++) {
+        const [target] = candidates.splice(Math.floor(Math.random() * candidates.length), 1);
+        setClimateFrozen(target, false);
+      }
     } else if (currentWeather.id === "winter") {
       const candidates = climateBodies.filter(body => !body.frozen && !body.spilled);
-      if (candidates.length) {
-        const target = candidates[Math.floor(Math.random() * candidates.length)];
+      const freezeCount = Math.min(currentWeather.isDeepWinter ? 3 : 1, candidates.length);
+      for (let index = 0; index < freezeCount; index++) {
+        const [target] = candidates.splice(Math.floor(Math.random() * candidates.length), 1);
         setClimateFrozen(target, true);
         const iceRadius = target.circleRadius ?? 0;
         // Keep an expanding ice shell inside the basket; the solver separates neighbours.
@@ -903,9 +910,9 @@ function ClimateMerge() {
           <p>NEXT <span>다음 기후</span></p>
           <ol>{dropQueue.slice(1).map((key, index) => <li key={index}><small>{index + 1}</small><b>{key}</b><span>{nodeFor(key).name}</span></li>)}</ol>
         </aside>
-        <aside className="climate-weather" data-season={weather.id} aria-label="현재 계절과 자연환경">
+        <aside className="climate-weather" data-season={weather.id} data-deep-winter={weather.isDeepWinter} aria-label="현재 계절과 자연환경">
           <div className="climate-weather-heading"><strong>{weather.name}</strong><span>다음 계절까지 {weather.remainingDrops}회</span></div>
-          <div className="climate-seasons" aria-hidden="true">{["봄", "여름", "가을", "겨울"].map(name => <span key={name} className={name === weather.name ? "is-current" : ""}>{name}</span>)}</div>
+          <div className="climate-seasons" aria-hidden="true">{["봄", "여름", "가을", "겨울"].map((name, index) => <span key={name} className={index === weather.seasonIndex ? "is-current" : ""}>{name}</span>)}</div>
           <p><b className="climate-wind-reading"><svg viewBox="0 0 32 24" className={weather.direction < 0 ? "is-left" : ""} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 7h18c7 0 7-6 2-6M5 12h24m-5-4 5 4-5 4M2 17h14c7 0 7 6 2 6" /></svg><span>{weather.speed === 0 ? "무풍" : `${weather.direction > 0 ? "→" : "←"} 풍속`} <strong>{weather.speed}</strong><em>/100</em></span></b><span>얼음 {pieces.filter(piece => piece.frozen).length}개</span></p>
           <div className="climate-wind-meter" role="meter" aria-label="풍속 (게임 강도)" aria-valuemin={0} aria-valuemax={100} aria-valuenow={weather.speed}><i style={{ width: `${weather.speed}%` }} /></div>
           <small>{weather.description}</small>
@@ -918,19 +925,7 @@ function ClimateMerge() {
             {weather.speed === 0 ? "무풍 · 0 / 100" : `${weather.direction > 0 ? "→" : "←"} 바람 ${weather.speed} / 100`}
           </output>
           <div className="outside-floor" aria-hidden="true"><span>바구니 밖 바닥 · 여기에 떨어지면 게임 오버</span></div>
-          <svg className="climate-weather-fx" data-force={weather.speed === 0 ? "calm" : weather.speed < 30 ? "light" : weather.speed < 65 ? "steady" : "strong"} viewBox="0 0 960 900" preserveAspectRatio="none" aria-hidden="true">
-            {Array.from({ length: 24 }, (_, index) => {
-              const y = 20 + ((index * 137) % 860);
-              const bend = 18 + (index % 4) * 11;
-              const curve = `M-180 ${y}C70 ${y - bend} 250 ${y + bend} 470 ${y}S850 ${y - bend} 1140 ${y + bend / 2}`;
-              return <g key={index} style={{ "--particle": index, "--stream-speed": 0.88 + (index % 5) * 0.06 } as React.CSSProperties}>
-                <path className="climate-wind-guide" d={curve} />
-                <path className="climate-wind-trail" d={curve} pathLength="1200" />
-                <path className="climate-wind-ribbon" d={curve} pathLength="1200" />
-                <path className="climate-wind-head" d={curve} pathLength="1200" />
-              </g>;
-            })}
-          </svg>
+          <ClimateWind speed={weather.speed} />
           {weather.id === "winter" && <div className="climate-snow-fx" aria-hidden="true">{Array.from({ length: 12 }, (_, index) => <i key={index} style={{ "--particle": index } as React.CSSProperties} />)}</div>}
           <section
             ref={boardRef}
