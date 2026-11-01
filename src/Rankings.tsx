@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import {
   formatDuration,
   topRankings,
+  TYPING_COUNTRY_COUNT,
   type RankingEntry as Entry,
 } from "./rankingRules"
 
@@ -89,7 +90,7 @@ export default function Rankings({
     try {
       const order = board === "climate" ? "score.desc" : "duration_ms.asc"
       const filter =
-        board === "climate" ? "" : "&duration_ms=not.is.null&score=eq.197"
+        board === "climate" ? "" : `&duration_ms=not.is.null&score=eq.${TYPING_COUNTRY_COUNT}`
       const rows: Entry[] = shared
         ? await request(
             `geo_rankings?game=eq.${board}${filter}&select=*&order=${order},accuracy.desc,created_at.asc,id.asc&limit=100`,
@@ -116,9 +117,9 @@ export default function Rankings({
     if (busy || submitted || score === undefined || score <= 0) return
     if (
       game !== "climate" &&
-      (score !== 197 || !Number.isInteger(durationMs) || durationMs! <= 0)
+      (score !== TYPING_COUNTRY_COUNT || !Number.isInteger(durationMs) || durationMs! <= 0)
     ) {
-      setMessage("197개국을 모두 완주한 기록만 등록할 수 있어요.")
+      setMessage(`${TYPING_COUNTRY_COUNT}개국을 모두 완주한 기록만 등록할 수 있어요.`)
       return
     }
     const name = nickname.trim()
@@ -234,7 +235,7 @@ export default function Rankings({
       <p className="rank-description">
         {game === "climate"
           ? "게임 오버 후 최종 점수로 상위 100개 기록을 표시해요."
-          : "197개국 완주 시간이 짧은 순서로 TOP 100을 표시해요. 동점은 정확도 순, 언어와 일반·하드모드는 각각 별도 랭킹이에요."}
+          : `${TYPING_COUNTRY_COUNT}개국 완주 시간이 짧은 순서로 TOP 100을 표시해요. 동점은 정확도 순, 언어와 일반·하드모드는 각각 별도 랭킹이에요.`}
       </p>
       <button
         type="button"
