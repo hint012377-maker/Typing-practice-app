@@ -407,14 +407,15 @@ body {
 .offline-location-halo { fill: var(--typing-accent); opacity: .2; }
 .offline-location-dot { fill: var(--typing-accent); stroke: var(--typing-surface); stroke-width: 2; }
 .offline-map-credit { position: absolute; bottom: 2px; right: 6px; color: var(--typing-muted); font-size: 9px; }
-.climate-weather { position: absolute; top: 100px; left: 20px; z-index: 60; width: 180px; padding: 14px; border: 1px solid var(--playroom-border); border-radius: 18px; background: var(--playroom-surface); color: var(--playroom-ink); pointer-events: none; }
+.climate-weather { position: absolute; top: 108px; left: 24px; z-index: 60; width: 252px; padding: 22px; border: 1px solid var(--playroom-border); border-radius: 22px; background: var(--playroom-surface); color: var(--playroom-ink); pointer-events: none; box-shadow: 0 16px 40px #071e1940; }
 .climate-weather-heading, .climate-weather p { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.climate-weather-heading strong { font-size: 22px; color: var(--playroom-accent); }
-.climate-weather-heading span, .climate-weather p span, .climate-weather small { font-size: 10px; color: var(--playroom-muted); }
-.climate-seasons { display: flex; gap: 4px; margin: 10px 0; font-size: 10px; }
+.climate-weather-heading strong { font-size: 38px; line-height: 1.3; color: var(--playroom-accent); }
+.climate-weather-heading span, .climate-weather p span, .climate-weather small { font-size: 13px; color: var(--playroom-muted); }
+.climate-weather-heading > span { max-width: 92px; text-align: right; line-height: 1.7; }
+.climate-seasons { display: flex; gap: 5px; margin: 18px 0; font-size: 13px; }
 .climate-seasons span { flex: 1; padding: 4px; text-align: center; border-radius: 999px; color: var(--playroom-muted); border: 1px solid var(--playroom-border); }
 .climate-seasons .is-current { background: var(--playroom-accent); color: var(--playroom-bg); border-color: var(--playroom-accent); font-weight: 700; }
-.climate-weather p { font-size: 12px; }
+.climate-weather p { font-size: 15px; }
 .climate-wind-reading { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .climate-wind-reading svg { width: 27px; height: 24px; flex-shrink: 0; color: var(--playroom-accent); }
 .climate-wind-reading svg.is-left { transform: scaleX(-1); }
@@ -423,21 +424,116 @@ body {
 .climate-wind-reading em { color: var(--playroom-muted); font-size: .75em; font-style: normal; }
 .climate-wind-meter { grid-column: 1 / -1; height: 4px; margin-top: 6px; overflow: hidden; border-radius: 999px; background: var(--playroom-bg); }
 .climate-wind-meter i { display: block; height: 100%; border-radius: inherit; background: var(--playroom-accent); transition: width .2s ease-out; }
-.climate-weather small { display: block; margin-top: 8px; line-height: 1.6; }
-.climate-scene[data-season="winter"] { background: radial-gradient(ellipse at 50% 25%, #e1ecee, #a9c1cc 80%); }
-.climate-scene[data-season="summer"] { background: radial-gradient(ellipse at 50% 25%, #fff0cb, #d9b37b 80%); }
-.climate-scene[data-season="autumn"] { background: radial-gradient(ellipse at 50% 25%, #efd6b4, #bf9677 80%); }
+.climate-weather small { display: block; margin-top: 12px; line-height: 1.7; }
 .climate-ball.is-frozen { border-color: #e1ecee; box-shadow: inset 0 0 0 7px #a9d5dce6, inset 0 0 22px #e1eceeee, 0 0 0 2px #a9d5dc; }
 .climate-ball.is-frozen::after { content: ""; position: absolute; inset: 3%; border-radius: inherit; background: linear-gradient(125deg, #e1ecee22 35%, #e1eceecc 36% 39%, #a9d5dc22 40% 62%, #e1eceebb 63% 65%, #e1ecee22 66%); }
 .climate-ice-label { position: absolute; bottom: 8%; z-index: 1; font: 700 1.6cqw var(--font-sans); color: #17342f; background: #e1ecee; border-radius: 999px; padding: .1em .5em; }
 .climate-weather-fx, .climate-snow-fx { position: absolute; inset: 0; z-index: 35; pointer-events: none; overflow: hidden; }
-.climate-weather-fx i { position: absolute; left: -25%; top: calc(8% + var(--particle) * 7%); width: var(--wind-width); height: 2px; border-radius: 999px; background: linear-gradient(90deg, transparent, #fff, #fff8); opacity: var(--wind-opacity); box-shadow: 0 1px 2px #17342f30; animation: climate-wind var(--wind-duration) linear infinite; animation-delay: calc(var(--particle) * -.37s); }
-.climate-weather-fx i:nth-child(3n)::after { content: ""; position: absolute; inset: 6px 25% auto 15%; height: 1px; border-radius: inherit; background: #fffc; }
+.climate-weather-fx { width: 100%; height: 100%; fill: none; stroke: var(--cosmic-wind); stroke-linecap: round; opacity: var(--wind-opacity); filter: drop-shadow(0 1px 1px #173e4938); }
+.climate-weather-fx path { animation: climate-wind calc(var(--wind-duration) * var(--stream-speed, 1)) linear infinite; animation-delay: calc(var(--particle) * -1.17s); }
+.climate-weather-fx .climate-wind-guide { stroke-width: 1; opacity: .055; animation: none; }
+.climate-wind-trail { stroke-width: 11; stroke-dasharray: 300 300 200 400; opacity: .12; }
+.climate-wind-ribbon { --trail-offset: -120px; stroke-width: 2.5; stroke-dasharray: 180 420 80 520; opacity: .6; }
+.climate-wind-head { --trail-offset: -300px; stroke-width: 2.2; stroke-dasharray: 4 496 4 696; opacity: .65; }
+.climate-weather-fx[data-force="light"] > g:nth-child(n+13), .climate-weather-fx[data-force="steady"] > g:nth-child(n+19) { display: none; }
+.climate-weather-fx[data-force="calm"] { visibility: hidden; }
+.climate-scene[data-wind="calm"] .climate-weather-fx path { animation-play-state: paused; }
+.climate-map-wind { position: absolute; right: 4%; top: 3%; z-index: 45; border-radius: 999px; padding: 7px 12px; background: color-mix(in srgb, var(--playroom-bg) 80%, transparent); color: var(--playroom-ink); border: 1px solid color-mix(in srgb, var(--playroom-ink) 25%, transparent); font: 600 12px var(--font-sans); pointer-events: none; }
 .climate-scene[data-wind="left"] :is(.climate-weather-fx, .climate-snow-fx) { transform: scaleX(-1); }
 .climate-snow-fx i { position: absolute; left: calc(var(--particle) * 9%); top: -5%; width: 4px; height: 4px; border-radius: 50%; background: #e1ecee; animation: climate-snow 5s linear infinite; animation-delay: calc(var(--particle) * -.37s); }
-.climate-scene[data-paused="true"] :is(.climate-weather-fx, .climate-snow-fx) i { animation-play-state: paused; }
-@keyframes climate-wind { to { transform: translateX(var(--wind-travel)); opacity: 0; } }
+.climate-scene[data-paused="true"] :is(.climate-weather-fx path, .climate-snow-fx i) { animation-play-state: paused; }
+@keyframes climate-wind { from { stroke-dashoffset: var(--trail-offset, 0px); } to { stroke-dashoffset: calc(var(--trail-offset, 0px) - 1200px); } }
 @keyframes climate-snow { to { transform: translate(35px, 80vh); opacity: .2; } }
+/* Scenery changes scale; the physics world and its collision bounds stay fixed. */
+.climate-arcade {
+  --playroom-bg: #142c29;
+  --playroom-surface: #23433a;
+  --playroom-border: #6c927b;
+  --playroom-accent: #e2edb0;
+  --playroom-ink: #f2f4df;
+  --playroom-muted: #c3d5c8;
+  --climate-hover: #355a48;
+  --climate-glow: #45694f;
+}
+.climate-scene {
+  --cosmic-sky: #68b1c7;
+  --cosmic-horizon: #d6ebe1;
+  --cosmic-wind: #efffff;
+  --cosmic-ink: #173e49;
+  --earth-land: #82bf86;
+  --meadow-light: #a5c38b;
+  --meadow-base: #688b60;
+  --meadow-deep: #41674e;
+  --planet-top: 90%;
+  --cosmic-nebula: #6689cc;
+  background: var(--cosmic-sky);
+  isolation: isolate;
+}
+.climate-scene[data-season="summer"] { --cosmic-sky: #78b9cd; --cosmic-horizon: #e6ecd5; --earth-land: #68b27b; --meadow-light: #a7c580; --meadow-base: #6d985e; --meadow-deep: #416e4c; }
+.climate-scene[data-season="autumn"] { --cosmic-sky: #a1b8c2; --cosmic-horizon: #efdfc9; --earth-land: #aca76e; --meadow-light: #cfbf89; --meadow-base: #a0936b; --meadow-deep: #756e51; }
+.climate-scene[data-season="winter"] { --cosmic-sky: #a2bac7; --cosmic-horizon: #e1eced; --earth-land: #c3d9cc; --meadow-light: #dce8df; --meadow-base: #b7ccbd; --meadow-deep: #8ca99a; }
+.climate-scene[data-scale="clouds"] { --cosmic-sky: #448aa9; --cosmic-horizon: #a5d0d8; }
+.climate-scene[data-scale="stratosphere"] { --cosmic-sky: #152f56; --cosmic-horizon: #5683a4; --cosmic-ink: #e3f4fa; }
+.climate-scene[data-scale="space"] { --cosmic-sky: #0c1933; --cosmic-horizon: #233e61; --cosmic-ink: #e3f4fa; }
+.climate-scene[data-scale="planet"] { --cosmic-sky: #090f25; --cosmic-horizon: #142947; --cosmic-ink: #e3f4fa; }
+.climate-scene[data-scale="solar"] { --cosmic-sky: #0d1025; --cosmic-horizon: #282040; --cosmic-ink: #e3f4fa; }
+.climate-scene[data-scale="galaxy"] { --cosmic-sky: #100d24; --cosmic-horizon: #35224b; --cosmic-ink: #e3f4fa; --cosmic-nebula: #ad7dc8; }
+.climate-cosmos { position: absolute; inset: 0; overflow: hidden; pointer-events: none; background: linear-gradient(var(--cosmic-sky), var(--cosmic-horizon)); }
+.climate-daylight { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 1; transition: opacity 1.8s ease; }
+.climate-scene:is([data-scale="stratosphere"], [data-scale="space"], [data-scale="planet"], [data-scale="solar"], [data-scale="galaxy"]) .climate-daylight { opacity: 0; }
+.climate-starfield { width: 100%; height: 100%; opacity: var(--star-opacity); transition: opacity 1.2s ease; }
+.cosmic-star { fill: var(--playroom-ink); }
+.cosmic-nebula { color: var(--cosmic-nebula); }
+.cosmic-solar-system { stroke: #c3d4ed66; stroke-width: .8; opacity: 0; transition: opacity 1.5s ease; }
+.cosmic-sun { fill: #ffe6a1; stroke: #fff0ce; }
+.cosmic-planet { fill: #c1a5cb; }
+.cosmic-galaxy { stroke: #d2b6ee66; stroke-width: 1.2; opacity: 0; transition: opacity 1.5s ease; }
+.cosmic-galaxy-core { fill: #fff0d4; stroke: #e6b9eb66; stroke-width: 2; }
+.climate-scene[data-scale="solar"] .cosmic-solar-system { opacity: .8; }
+.climate-scene[data-scale="galaxy"] .cosmic-galaxy { opacity: .9; }
+.climate-earth { position: absolute; top: var(--planet-top); left: 50%; width: var(--earth-size); aspect-ratio: 1; transform: translateX(-50%); border-radius: 50%; background: #2e8caf; opacity: var(--earth-opacity); box-shadow: 0 0 0 1px #b6f1ff80, 0 -4px 16px #97e5ff80, 0 -10px 38px #81c7ff38; transition: width 1.4s ease, opacity 1.4s ease, box-shadow 1.4s ease; }
+.climate-earth svg { display: block; width: 100%; height: 100%; }
+.earth-continents { fill: url(#climate-earth-land); }
+.earth-land-light { stop-color: var(--earth-land); }
+.earth-land-shadow { stop-color: color-mix(in srgb, var(--earth-land) 65%, #244a4c); }
+.earth-clouds { stroke: #f0ffff; stroke-width: 4; stroke-linecap: round; opacity: .4; }
+.earth-clouds > path:last-child { stroke-width: 2; opacity: .6; }
+.earth-atmosphere { fill: none; stroke: #aee7f6; stroke-width: 1; }
+.climate-grass, .climate-city { position: absolute; bottom: 0; left: 0; width: 100%; height: 32%; transition: opacity 1.4s ease, transform 1.4s ease; }
+.climate-grass { opacity: var(--grass-opacity); }
+.meadow-light { stop-color: var(--meadow-light); }
+.meadow-shadow { stop-color: var(--meadow-base); }
+.meadow-distant { fill: color-mix(in srgb, var(--meadow-light) 60%, var(--cosmic-horizon)); }
+.meadow-fine-grass { stroke: var(--meadow-base); stroke-width: 1.6; opacity: .45; stroke-linecap: round; }
+.grass-blade { fill: var(--meadow-base); }
+.grass-blade:nth-of-type(3n) { fill: color-mix(in srgb, var(--meadow-light) 80%, var(--meadow-base)); }
+.grass-blade:nth-of-type(3n+1) { fill: var(--meadow-deep); }
+.grass-flowers { fill: #f4efe0; stroke: none; }
+.grass-flowers path { fill: none; stroke: var(--meadow-deep); stroke-width: 1.5; }
+.grass-flower-center { fill: #e4cd86; }
+.climate-city { opacity: var(--city-opacity); transform: scale(var(--city-scale)); transform-origin: center bottom; }
+.city-distant { fill: #9cb6b8; opacity: .35; }
+.city-park { fill: color-mix(in srgb, var(--meadow-base) 60%, var(--cosmic-horizon)); }
+.city-buildings { fill: url(#climate-city-light); }
+.city-buildings > g:nth-child(3n) { fill: #89a5a4; }
+.city-building-side { fill: #446c72; opacity: .22; }
+.city-rooftop { fill: #729397; }
+.city-antenna { stroke: #6e9094; stroke-width: 1.5; }
+.city-windows { fill: none; stroke: #f4e9be; stroke-width: 2.5; opacity: .6; }
+.city-trees { fill: var(--meadow-base); stroke: var(--meadow-deep); stroke-width: 1.5; }
+.city-road { fill: none; stroke: #8eaaa3; stroke-width: 15; }
+.city-road-markings { fill: none; stroke: #ede9d5; stroke-width: 1.2; stroke-dasharray: 14 20; opacity: .6; }
+.climate-low-clouds { position: absolute; inset: auto 0 8%; width: 100%; height: 16%; opacity: .7; transition: opacity 1s; }
+.climate-ground-mist { position: absolute; inset: auto 0 2%; height: 17%; background: linear-gradient(transparent 20%, color-mix(in srgb, var(--cosmic-horizon) 35%, transparent) 60%, transparent); opacity: max(var(--grass-opacity), var(--city-opacity)); }
+.climate-scene:not([data-scale="city"]):not([data-scale="clouds"]) .climate-low-clouds { opacity: 0; }
+.climate-scene .climate-board { width: 92%; transform: scale(var(--basket-scale)); transform-origin: center bottom; transition: transform 1.4s ease; }
+.climate-scene .climate-board > div:first-child { background: none; }
+.climate-scene .outside-floor { top: var(--planet-top); background: none; border: 0; box-shadow: none; pointer-events: none; }
+.climate-scene .outside-floor span { color: var(--cosmic-ink); opacity: .8; font-weight: 500; z-index: 2; }
+@media (min-width: 1001px) {
+  .climate-arcade { background: radial-gradient(ellipse at 50% 35%, #345f54, var(--playroom-bg) 75%); }
+  .climate-arcade .climate-scene { width: min(900px, calc((100dvh - 145px) * .8), calc(100vw - 580px)); aspect-ratio: 4 / 5; top: 94px; }
+}
 /* Give the basket, rather than its decorative outside area, the mobile width. */
 @media (max-width: 1000px) {
   .climate-arcade > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto auto minmax(0, 1fr) auto; gap: 6px; padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)); }
@@ -459,6 +555,7 @@ body {
   .climate-weather-heading { gap: 6px; justify-content: flex-start; }
   .climate-weather-heading strong { font-size: 18px; white-space: nowrap; }
   .climate-weather-heading span { font-size: 9px; white-space: nowrap; }
+  .climate-weather-heading > span { max-width: none; text-align: left; }
   .climate-seasons { display: none; }
   .climate-weather p { justify-content: flex-end; font-size: 10px; white-space: nowrap; }
   .climate-weather p span { font-size: 9px; }
@@ -467,11 +564,14 @@ body {
   .climate-weather small { grid-column: 1 / -1; text-align: center; font-size: 9px; margin: 0; }
   .climate-arcade > div > div.h-full { grid-row: 4; grid-column: 1 / -1; min-height: 0; container-type: size; display: flex; align-items: center; }
   .climate-arcade .climate-scene { top: 0; width: min(100%, 80cqh); aspect-ratio: 4 / 5; border-radius: 18px; }
-  .climate-arcade .climate-scene .climate-board { width: 92%; }
-  .climate-arcade .outside-floor { top: 92%; }
+  .climate-arcade .climate-scene { --planet-top: 92%; }
+  .climate-arcade .climate-scene .climate-board { width: 94%; }
+  .climate-arcade .outside-floor { top: var(--planet-top); }
   .climate-arcade .outside-floor span { font-size: 8px; bottom: 15%; }
   .climate-arcade .arcade-footer { display: none; }
   .climate-arcade .help-launch { position: static; grid-row: 5; grid-column: 1 / -1; justify-self: center; padding: 6px 14px; font-size: 11px; }
+  .climate-scene .climate-board > p:first-of-type { display: none; }
+  .climate-map-wind { top: 2%; padding: 5px 9px; font-size: 10px; }
 }
 @media (max-width: 360px) {
   .climate-arcade .climate-weather { column-gap: 5px; }
@@ -480,8 +580,10 @@ body {
   .climate-wind-reading svg { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .climate-weather-fx i, .climate-snow-fx i { animation: none; display: none; }
+  .climate-weather-fx path { animation: none; }
+  .climate-snow-fx i { animation: none; display: none; }
   .climate-wind-meter i { transition: none; }
+  .climate-scene .climate-board, .climate-earth, .climate-daylight, .climate-starfield, .climate-low-clouds, .climate-grass, .climate-city, .cosmic-solar-system, .cosmic-galaxy { transition: none; }
 }
 /* Keep the map and prompt inside the viewport above the mobile keyboard. */
 @media (max-width: 639px) {
