@@ -71,7 +71,13 @@ const lesson: Country[] = [
   { code: "PHL", korean: "필리핀", english: "Philippines", lat: 12.88, lng: 121.77, zoom: 5 },
 ];
 
-const typingLesson: Country[] = [...lesson, ...additionalCountries];
+const allCountries: Country[] = [...lesson, ...additionalCountries];
+const typingLesson: Country[] = allCountries
+  .filter(country => country.code !== "PRK")
+  .map(country => ({
+    ...country,
+    english: country.english.normalize("NFD").replace(/[\u0300-\u036f]/g, ""),
+  }));
 
 function shuffleCountries(previousLast?: string): Country[] {
   const shuffled = [...typingLesson];
@@ -396,7 +402,7 @@ function CountryTyping() {
               />
             </div>
             <p className="map-status" role="status">API 키 설정이 아직 적용되지 않아 하드모드에 나라 지도 사진으로 대체 했습니다.</p>
-            {challenge && <p className="typing-caption" role="status">{finished ? `197개국 완주 · ${(completionMs! / 1000).toFixed(3)}초 · 정확도 ${accuracy}%` : `197개국 완주 도전 · ${correct} / 197 완료 · 도전 중 언어 변경 불가`}{finished && <button type="button" className="rank-action" onClick={() => setRankOpen(true)}>완주 기록 등록</button>}</p>}
+            {challenge && <p className="typing-caption" role="status">{finished ? `${typingLesson.length}개국 완주 · ${(completionMs! / 1000).toFixed(3)}초 · 정확도 ${accuracy}%` : `${typingLesson.length}개국 완주 도전 · ${correct} / ${typingLesson.length} 완료 · 도전 중 언어 변경 불가`}{finished && <button type="button" className="rank-action" onClick={() => setRankOpen(true)}>완주 기록 등록</button>}</p>}
             <p className="typing-caption">{typingLesson.length}개 국가·지역을 한 바퀴 동안 중복 없이 무작위로 연습해요 · 지도 모드는 유지돼요<br />한글은 조합이 끝난 글자만 채점해요 · <a href={countryDataAttribution.source} target="_blank" rel="noreferrer">국가 데이터: mledoze/countries</a> · <a href={countryDataAttribution.license} target="_blank" rel="noreferrer">ODbL</a></p>
           </div>
         </div>
@@ -1007,8 +1013,8 @@ const router = createHashRouter([
   { path: "/", element: <Launcher /> },
   { path: "/typing", element: <CountryTyping /> },
   { path: "/climate", element: <ClimateMerge /> },
-  { path: "/rhythm", element: <Suspense fallback={rhythmLoading}><RhythmGame countries={typingLesson} /></Suspense> },
-  { path: "/thythm", element: <Suspense fallback={rhythmLoading}><RhythmGame countries={typingLesson} /></Suspense> },
+  { path: "/rhythm", element: <Suspense fallback={rhythmLoading}><RhythmGame countries={allCountries} /></Suspense> },
+  { path: "/thythm", element: <Suspense fallback={rhythmLoading}><RhythmGame countries={allCountries} /></Suspense> },
   { path: "/explore", element: <Suspense fallback={rhythmLoading}><RhythmGame countries={lesson} /></Suspense> },
   { path: "*", element: <Launcher /> },
 ]);
