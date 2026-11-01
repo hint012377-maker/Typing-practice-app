@@ -407,8 +407,82 @@ body {
 .offline-location-halo { fill: var(--typing-accent); opacity: .2; }
 .offline-location-dot { fill: var(--typing-accent); stroke: var(--typing-surface); stroke-width: 2; }
 .offline-map-credit { position: absolute; bottom: 2px; right: 6px; color: var(--typing-muted); font-size: 9px; }
-.climate-blocked-zone { position: absolute; top: 12%; bottom: 9%; pointer-events: none; z-index: 30; background: repeating-linear-gradient(135deg, #8d562620 0 8px, transparent 8px 16px); border: 1px dashed #8d562680; }
-.climate-blocked-zone span { display: block; text-align: center; font-size: 10px; color: #57351d; background: #fffdf5cc; padding: 4px; }
+.climate-weather { position: absolute; top: 100px; left: 20px; z-index: 60; width: 180px; padding: 14px; border: 1px solid var(--playroom-border); border-radius: 18px; background: var(--playroom-surface); color: var(--playroom-ink); pointer-events: none; }
+.climate-weather-heading, .climate-weather p { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.climate-weather-heading strong { font-size: 22px; color: var(--playroom-accent); }
+.climate-weather-heading span, .climate-weather p span, .climate-weather small { font-size: 10px; color: var(--playroom-muted); }
+.climate-seasons { display: flex; gap: 4px; margin: 10px 0; font-size: 10px; }
+.climate-seasons span { flex: 1; padding: 4px; text-align: center; border-radius: 999px; color: var(--playroom-muted); border: 1px solid var(--playroom-border); }
+.climate-seasons .is-current { background: var(--playroom-accent); color: var(--playroom-bg); border-color: var(--playroom-accent); font-weight: 700; }
+.climate-weather p { font-size: 12px; }
+.climate-wind-reading { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.climate-wind-reading svg { width: 27px; height: 24px; flex-shrink: 0; color: var(--playroom-accent); }
+.climate-wind-reading svg.is-left { transform: scaleX(-1); }
+.climate-weather .climate-wind-reading span { color: var(--playroom-ink); font-size: inherit; }
+.climate-wind-reading strong { color: var(--playroom-accent); font-family: var(--font-mono); font-size: 1.2em; }
+.climate-wind-reading em { color: var(--playroom-muted); font-size: .75em; font-style: normal; }
+.climate-wind-meter { grid-column: 1 / -1; height: 4px; margin-top: 6px; overflow: hidden; border-radius: 999px; background: var(--playroom-bg); }
+.climate-wind-meter i { display: block; height: 100%; border-radius: inherit; background: var(--playroom-accent); transition: width .2s ease-out; }
+.climate-weather small { display: block; margin-top: 8px; line-height: 1.6; }
+.climate-scene[data-season="winter"] { background: radial-gradient(ellipse at 50% 25%, #e1ecee, #a9c1cc 80%); }
+.climate-scene[data-season="summer"] { background: radial-gradient(ellipse at 50% 25%, #fff0cb, #d9b37b 80%); }
+.climate-scene[data-season="autumn"] { background: radial-gradient(ellipse at 50% 25%, #efd6b4, #bf9677 80%); }
+.climate-ball.is-frozen { border-color: #e1ecee; box-shadow: inset 0 0 0 7px #a9d5dce6, inset 0 0 22px #e1eceeee, 0 0 0 2px #a9d5dc; }
+.climate-ball.is-frozen::after { content: ""; position: absolute; inset: 3%; border-radius: inherit; background: linear-gradient(125deg, #e1ecee22 35%, #e1eceecc 36% 39%, #a9d5dc22 40% 62%, #e1eceebb 63% 65%, #e1ecee22 66%); }
+.climate-ice-label { position: absolute; bottom: 8%; z-index: 1; font: 700 1.6cqw var(--font-sans); color: #17342f; background: #e1ecee; border-radius: 999px; padding: .1em .5em; }
+.climate-weather-fx, .climate-snow-fx { position: absolute; inset: 0; z-index: 35; pointer-events: none; overflow: hidden; }
+.climate-weather-fx i { position: absolute; left: -25%; top: calc(8% + var(--particle) * 7%); width: var(--wind-width); height: 2px; border-radius: 999px; background: linear-gradient(90deg, transparent, #fff, #fff8); opacity: var(--wind-opacity); box-shadow: 0 1px 2px #17342f30; animation: climate-wind var(--wind-duration) linear infinite; animation-delay: calc(var(--particle) * -.37s); }
+.climate-weather-fx i:nth-child(3n)::after { content: ""; position: absolute; inset: 6px 25% auto 15%; height: 1px; border-radius: inherit; background: #fffc; }
+.climate-scene[data-wind="left"] :is(.climate-weather-fx, .climate-snow-fx) { transform: scaleX(-1); }
+.climate-snow-fx i { position: absolute; left: calc(var(--particle) * 9%); top: -5%; width: 4px; height: 4px; border-radius: 50%; background: #e1ecee; animation: climate-snow 5s linear infinite; animation-delay: calc(var(--particle) * -.37s); }
+.climate-scene[data-paused="true"] :is(.climate-weather-fx, .climate-snow-fx) i { animation-play-state: paused; }
+@keyframes climate-wind { to { transform: translateX(var(--wind-travel)); opacity: 0; } }
+@keyframes climate-snow { to { transform: translate(35px, 80vh); opacity: .2; } }
+/* Give the basket, rather than its decorative outside area, the mobile width. */
+@media (max-width: 1000px) {
+  .climate-arcade > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto auto minmax(0, 1fr) auto; gap: 6px; padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)); }
+  .climate-arcade .climate-disclaimer { display: none; }
+  .climate-arcade .arcade-header { position: static; grid-column: 1 / -1; display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; }
+  .climate-arcade .arcade-header > a { padding: 7px 12px; }
+  .climate-arcade .arcade-header > div:nth-child(2) { margin-left: auto; }
+  .climate-arcade .arcade-header > div:nth-child(2) > p:first-child { font-size: 8px; }
+  .climate-arcade .arcade-header > div:nth-child(2) > p:last-child { margin-top: 0; font-size: 18px; }
+  .climate-arcade .arcade-controls { grid-column: 1 / -1; justify-content: flex-end; gap: 6px; }
+  .climate-arcade .arcade-controls button { padding: 6px 10px; min-height: 32px; }
+  .climate-arcade .climate-chain-launch { position: static; grid-row: 2; grid-column: 2; padding: 6px 10px; font-size: 10px; align-self: stretch; }
+  .climate-arcade .climate-next { position: static; grid-row: 2; grid-column: 1; min-width: 0; width: auto; padding: 5px 8px; gap: 6px; border-radius: 12px; }
+  .climate-arcade .climate-next > p { font-size: 9px; }
+  .climate-arcade .climate-next > p span, .climate-arcade .climate-next small { display: none; }
+  .climate-arcade .climate-next li { display: block; text-align: center; padding: 3px; }
+  .climate-arcade .climate-next b { font-size: 14px; }
+  .climate-arcade .climate-weather { position: static; grid-row: 3; grid-column: 1 / -1; width: auto; display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 6px 10px; border-radius: 12px; }
+  .climate-weather-heading { gap: 6px; justify-content: flex-start; }
+  .climate-weather-heading strong { font-size: 18px; white-space: nowrap; }
+  .climate-weather-heading span { font-size: 9px; white-space: nowrap; }
+  .climate-seasons { display: none; }
+  .climate-weather p { justify-content: flex-end; font-size: 10px; white-space: nowrap; }
+  .climate-weather p span { font-size: 9px; }
+  .climate-wind-reading svg { width: 22px; height: 20px; }
+  .climate-wind-meter { margin-top: 2px; }
+  .climate-weather small { grid-column: 1 / -1; text-align: center; font-size: 9px; margin: 0; }
+  .climate-arcade > div > div.h-full { grid-row: 4; grid-column: 1 / -1; min-height: 0; container-type: size; display: flex; align-items: center; }
+  .climate-arcade .climate-scene { top: 0; width: min(100%, 80cqh); aspect-ratio: 4 / 5; border-radius: 18px; }
+  .climate-arcade .climate-scene .climate-board { width: 92%; }
+  .climate-arcade .outside-floor { top: 92%; }
+  .climate-arcade .outside-floor span { font-size: 8px; bottom: 15%; }
+  .climate-arcade .arcade-footer { display: none; }
+  .climate-arcade .help-launch { position: static; grid-row: 5; grid-column: 1 / -1; justify-self: center; padding: 6px 14px; font-size: 11px; }
+}
+@media (max-width: 360px) {
+  .climate-arcade .climate-weather { column-gap: 5px; }
+  .climate-weather-heading { flex-wrap: wrap; gap: 0 4px; }
+  .climate-weather-heading span { font-size: 8px; }
+  .climate-wind-reading svg { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .climate-weather-fx i, .climate-snow-fx i { animation: none; display: none; }
+  .climate-wind-meter i { transition: none; }
+}
 /* Keep the map and prompt inside the viewport above the mobile keyboard. */
 @media (max-width: 639px) {
   .typing-room { position: fixed; inset: var(--typing-offset, 0px) 0 auto; height: var(--typing-viewport, 100dvh); min-height: 0; overflow-y: auto; }
